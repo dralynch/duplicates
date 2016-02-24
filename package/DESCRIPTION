@@ -1,0 +1,15 @@
+Package: LynchSmithEldridgeTavareFragDup
+Type: Package
+Title: Produces the Sweave to support "A method for the empirical
+        correction of estimated PCR duplication rates with
+        applications"
+Version: 1.5
+Date: 2015-08-21
+Author: Andy Lynch
+Maintainer: Andy Lynch <andy.lynch@cruk.cam.ac.uk>
+Depends: Rsamtools, BSgenome.Hsapiens.UCSC.hg19
+Suggests: BiocStyle
+Description: Just exists to produce the sweave
+License: Artistic-2.0
+NeedsCompilation: no
+Packaged: 2015-09-02 14:17:55 UTC; root

@@ -1,0 +1,25 @@
+ID & Sex & Tissue & Reads & Dup. & Library \\
+ &  & Tissue & ($10^9$) & Rate & Size \\
+ &  &  &  &  & ($10^9$) \\
+3108 & Female & Blood & 1.15 & 6.15 & 9.03 \\
+3110 & Male & Blood & 1.16 & 7.86 & 7 \\
+3112 & Male & Blood & 1.29 & 6.94 & 8.86 \\
+3114 & Male & Blood & 0.88 & 5.05 & 8.46 \\
+3116 & Male & NormalOes & 0.93 & 11.92 & 3.59 \\
+3118 & Male & NormalOes & 1.16 & 14.49 & 3.61 \\
+3120 & Male & Blood & 1.11 & 4.01 & 13.55 \\
+3124 & Male & Blood & 0.99 & 8.07 & 5.81 \\
+3128 & Male & Blood & 0.97 & 4.8 & 9.8 \\
+3130 & Male & Blood & 1.03 & 8.34 & 5.83 \\
+3132 & Male & Blood & 1.02 & 6.03 & 8.15 \\
+3134 & Male & Blood & 1.1 & 4.38 & 12.21 \\
+3136 & Male & Blood & 0.99 & 5.76 & 8.3 \\
+3148 & Female & Blood & 1.03 & 3.73 & 13.55 \\
+3301 & Male & NormalOes & 0.89 & 5.92 & 7.27 \\
+3304 & Male & NormalOes & 1.01 & 8.37 & 5.74 \\
+3307 & Male & NormalOes & 1.04 & 6.85 & 7.27 \\
+3310 & Female & NormalOes & 1.03 & 10.71 & 4.46 \\
+3313 & Female & NormalOes & 1 & 5.22 & 9.31 \\
+3316 & Male & NormalOes & 0.97 & 5.99 & 7.86 \\
+3319 & Male & NormalOes & 1.05 & 8.24 & 6.01 \\
+3322 & Male & NormalOes & 0.93 & 11.34 & 3.8 \\

@@ -1,0 +1,1260 @@
+\documentclass{article}
+
+\usepackage{Sweave}
+\usepackage[utf8]{inputenc}
+\usepackage{color}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{color}
+<<style, eval=TRUE, echo=FALSE, results=tex>>=
+BiocStyle::latex()
+library("LynchSmithEldridgeTavareFragDup")
+endloop<-22
+@
+
+
+
+\title{`Fragmentation duplicates': Sweave}
+\author{Andy Lynch and Mike Smith}
+\begin{document}
+\SweaveOpts{concordance=TRUE,useFancyQuotes=FALSE}
+
+\maketitle
+\tableofcontents
+
+\section{Introduction: The LynchSmithEldridgeTavareFragDup Package}
+
+\subsection{This Sweave}
+
+This Sweave generates the tables and data-driven figures displayed in the paper `A method for the empirical correction of estimated PCR duplication rates, with applications' by Lynch, Smith, Eldridge and Taver\'{e} on behalf of the OCCAMS Consortium. It also provides greater information on some points of detail. It is dependent on the \Bioconductor{} \Biocpkg{BiocStyle} package.
+
+This Sweave is part of the \R{} package \Rpackage{LynchSmithEldridgeTavareFragDup} that forms the additional file for that paper and which contains all of the functions, data, and (through this Sweave) code to reproduce the results in the manuscript. This package serves no other purpose and is not part of any repository. Pains have been taken to choose a name that is unlikely to clash with any other package. 
+
+\subsection{The Data}
+
+The contents of the extdata folder in the package are:
+
+<<Overview>>=
+list.files(system.file("extdata", package="LynchSmithEldridgeTavareFragDup"))
+@
+
+\file{WeaverSuppTable1.txt} reproduces data from the first Supplementary Table of Weaver et al. (2014) \emph{Nature Genetics} \textbf{46}, 837–843, and describes the samples used to illustrate this manuscript.
+
+The contents of \file{masks} and \file{Picard} detail the numbers of reads and duplicates within defined regions of the genome as discussed in Section~\ref{sec:SampInfo}.
+
+\file{SNPstoextract.txt} and \file{HetSNPDups.txt} give details of the SNPs described in Section~\ref{sec:SNPs} and used in Section~\ref{sec:Estimates}.
+
+The contents of \file{Tumour} are used in Section~\ref{sec:Tumour}, where \file{HetSNPDupsHighGC.txt} and \file{HetSNPDupsLowGC.txt} are also described.
+
+
+
+\subsection{The Functions}
+
+The library defines the following functions:
+
+\begin{itemize}
+  \item \Rfunction{secondbiggest}: a function to pick the second largest value from a vector.
+  \item \Rfunction{propllik}: a function function that takes the empirical observations of allele patterns, and calculates the log-likelihood of the proportion of duplicates arising from fragmentation of distinct molecules, via calls to genprobs.
+    \item \Rfunction{libCompNewParam}: A function to check the consistency of a library complexity estimate, the number of read-pairs and the duplicate rate.
+    \item \Rfunction{genprobs}: Returns the probabilities of different allele patterns given the number of duplicates and the fragmentation duplication rate.
+    \item \Rfunction{genPL}: Generate the lists of all partitions of $n$ objects for $1\leq n \leq N$
+    \item \Rfunction{genCoefs}: Generates the binomialesque coefficients associated with partitions of objects.
+\end{itemize}
+
+\section{Sample information}
+\label{sec:SampInfo}
+We are considering twenty-two `normal' samples from patients forming part of the \href{http://www.compbio.group.cam.ac.uk/research/icgc}{Oesophageal Adenocarcinoma ICGC} study run by the \href{http://www.mrc-cu.cam.ac.uk/our\_research/Rebecca\_Fitzgerald/occams.html}{OCCAMS Consortium}. The full data for these samples are archived in the European Genome Archive [\href{https://www.ebi.ac.uk/ega/datasets/EGAD00001000704}{EGA:EGAD00001000704}] and have featured in the paper \href{http://www.nature.com/ng/journal/v46/n8/abs/ng.3013.html}{Ordering of mutations in preinvasive disease stages of esophageal carcinogenesis}. 
+
+Of the twenty-two samples, twelve were blood, and ten were oesophageal tissue. DNA from oesophageal tissue was extracted using the DNeasy kit (Qiagen) and from blood using the NucleonTM Genomic Extraction kit (Gen-Probe) (according to the manufacturer's instructions). 
+
+The sequencing was conducted under contract by Illumina, typically comprising five lanes of 100bp paired end sequencing. The depth of coverage ranges from $57$x to $87$x with a mean of $68$x.
+
+This study is a presentation of analysis methods not a presentation of the sequencing data, and raw data that could identify the patients is not provided. Sufficient data are provided to illustrate the methods presented. Further access is via the Project's Data Access Committee. 
+
+<<Preparation>>=
+library("Rsamtools")
+library("BSgenome.Hsapiens.UCSC.hg19")
+EDpath <- system.file("extdata", package="LynchSmithEldridgeTavareFragDup")
+@
+
+\subsection{Picard}
+
+Picard was applied to the raw bam files, and from this output we extract data on the number of read pairs examined, the numbers of read pairs marked as duplicates, and the number of read pairs marked as optical duplicates. We keep the full results for incorporation into Table 1.
+
+
+<<PicardUnmasked>>=
+unmaskedP<-read.delim(file.path(EDpath,"Picard", "samples.metrics.txt"),as.is=T)
+
+readPairsExamined <- 
+  readPairDuplicates <- 
+  OpticalPairDuplicates <- matrix(ncol=9, nrow=22, 
+                            dimnames = list(unmaskedP[,1], c("Total", "X", "Y", "M",
+                                                             "Centromeres","Telomeres",
+                                                             "LowCov","HighCov",
+                                                             "Residual")))
+
+readPairsExamined[,1]<-unmaskedP[,3]
+readPairDuplicates[,1]<-unmaskedP[,6]
+OpticalPairDuplicates[,1]<-unmaskedP[,7]
+@
+
+
+\subsubsection{Generate Table 1}
+
+Before generating a table, we define some vectors that allow us to write out the results in a form ready to paste into a LaTeX document.
+
+<<LatexTableValues>>=
+latexdiv22<-rep("&",22)
+latexend22<-rep("\\\\",22)
+latexdiv8<-rep("&",8)
+latexend8<-rep("\\\\",8)
+@
+
+We read in supplementary table 1 from Weaver et al, and extract the information of interest to us.
+
+<<ReadWeaver,eval=TRUE>>=
+WeaverSuppTable1<-read.delim(file.path(EDpath,"WeaverSuppTable1.txt"),sep="",header=T,as.is=T)
+WeaverSuppTable1$CaseID<-WeaverSuppTable1$CaseID-1
+@
+
+Next we collect the information for Table 1 of the main manuscript, and prepare it for insertion into the LaTeX document.
+
+<<GenTable1,eval=TRUE>>=
+Table1<-cbind(
+WeaverSuppTable1[,1],latexdiv22,
+WeaverSuppTable1[,2],latexdiv22,
+WeaverSuppTable1[,12],latexdiv22,
+round(unmaskedP[,3]/1000000000,2),latexdiv22,
+round(100*unmaskedP[,6]/unmaskedP[,3],2),latexdiv22,
+round(unmaskedP[,9]/1000000000,2),latexend22
+)
+
+Table1[Table1=="NormalOesophagus"]<-"NormalOes"
+
+Table1<-rbind(c("ID", "&","Sex","&","Tissue","&","Reads","&","Dup.","&","Library", "\\\\"),
+              c("","&","","&","Tissue","&","($10^9$)","&","Rate","&","Size","\\\\" ), 
+              c("","&","","&","","&","","&","","&","($10^9$)","\\\\"), Table1)
+
+write.table(Table1,sep=" ",file="Table1.tsv",row.names=F,col.names=F,quote=F)
+Table1
+@
+
+We will define four groups based on sex and the origin of the tissue/DNA extraction kit used.
+
+<<ExploreSI2>>=
+table(WeaverSuppTable1[,2],WeaverSuppTable1[,12])
+Group<-1+2*(WeaverSuppTable1[,2]=="Male")+(WeaverSuppTable1[,12]=="Blood")
+GroupN<-c("Female_Tissue","Female_Blood","Male_Tissue","Male_Blood")[Group]
+@
+
+\subsubsection{Masks}
+
+The regions that we mask out of the genome for this study are defined in the \file{.bed} files in this package. For instance, the Centromeres are masked out by the 4th mask file. For further reference, we will record the total genome size, sizes of masked regions, and the remainder (residual).
+
+<<exploreMasks,eval=TRUE>>=
+list.files(file.path(EDpath,"masks"))
+head(read.delim(file.path(EDpath, "masks", "Mask4-Centromeres.bed"),header=F,as.is=T))
+
+maskFiles <- list.files(file.path(EDpath,"masks"), full.names = TRUE)
+MASKS <- lapply(maskFiles, read.delim, header=FALSE, as.is=TRUE, skip=1)
+effectiveGenomeSize<-rep(0,9)
+effectiveGenomeSize[1]<-sum(as.numeric(MASKS[[5]][17:38,3]))
++MASKS[[1]][1,3]+MASKS[[2]][1,3]+MASKS[[3]][1,3]
+for(i in 1:7){ 
+    effectiveGenomeSize[i+1] <- sum(MASKS[[i]][,3] - MASKS[[i]][,2])}
+effectiveGenomeSize[9]<-effectiveGenomeSize[1]-sum(effectiveGenomeSize[2:8])
+@
+
+\subsubsection{Picard Output}
+
+Picard was run on bam files defined by these masks (separately for each mask) and we read these data into the matrices created earlier, before creating Table 2 in the paper.
+
+We only use the "READ\_PAIRS\_EXAMINED", "READ\_PAIR\_DUPLICATES", and "READ\_PAIR\_OPTICAL\_DUPLICATES" values that Picard produces (as indeed does Picard for this problem). For simplicity, we create three tables to take these values and store in them the Picard output for the entire samples, and then also for Picard output generated from the masked regions.
+
+<<PicardMasked,eval=TRUE>>=
+metfiles<-list.files(file.path(EDpath,"Picard"))
+metfiles<-grep("mask",metfiles,value=T)
+
+for(i in 1:7){
+  temp<-read.delim(file.path(EDpath,"Picard",metfiles[i]),as.is=T)
+  temp<-temp[-(15:19),]
+  readPairsExamined[,i+1]<-temp[,3]
+  readPairDuplicates[,i+1]<-temp[,6]
+  OpticalPairDuplicates[,i+1]<-temp[,7]
+}
+@
+
+We now calculate the 'residual' counts by subtracting the masked regions from the total.
+
+<<PicardResid,eval=TRUE>>=
+readPairsExamined[,9]<-readPairsExamined[,1]-apply(readPairsExamined[,2:8],1,sum)
+readPairDuplicates[,9]<-readPairDuplicates[,1]-apply(readPairDuplicates[,2:8],1,sum)
+OpticalPairDuplicates[,9]<-OpticalPairDuplicates[,1]-apply(OpticalPairDuplicates[,2:8],1,sum)
+@
+
+
+\subsubsection{Generate Table 2}
+
+Now we report the residual values and the numbers for the masked regions relative to the residual values. This is Table 2 of the main manuscript. 
+
+<<PicardTable2,eval=TRUE>>=
+
+reptable<-matrix(0,ncol=4,nrow=8)
+reptable[1,]<-round(100*sapply(split(((readPairDuplicates[,9]/readPairsExamined[,9])),Group),mean),2)
+for(i in 2:8){
+  reptable[i,]<-round(sapply(split((
+    (readPairDuplicates[,i]/readPairsExamined[,i])
+    /(readPairDuplicates[,9]/readPairsExamined[,9])),Group),mean),2)
+}
+
+Table2<-cbind(reptable[,1],latexdiv8,reptable[,2],latexdiv8,reptable[,3],latexdiv8,
+              reptable[,4],latexend8)
+write.table(Table2,sep="\t",file="Table2.tsv",row.names=F,col.names=F,quote=F)
+
+reptable[3,1:2]<-"-"
+rownames(reptable)<-c("Residual","X","Y","M","Centromeres","Telomeres","Low Cov","High Cov")
+colnames(reptable)<-c("Female Tissue","Female Blood","Male Tissue","Male Blood")
+reptable
+@
+
+
+
+\section{Methods}
+
+\subsection{Case 1: A pair of duplicate fragments}
+
+Recall that if we have only observe duplicate fragments in pairs then, if we observe counts of $N_{AA}$ fragment pairs reporting the same nucleotide, and $N_{AB}$ reporting different nucleotides, the estimate of $P_D$ is
+\begin{equation} \label{eq:M2}
+P_D = 1- 2 \times N_{AB}/N.
+\end{equation} 
+
+\subsection{Case 2: More than two duplicate fragments}
+\label{subsec:Case2}
+
+Recall that in this case we estimate $P_D$ by maximizing the total log-likelihood 
+\begin{equation}
+l(P_D) = \sum_{M} l_M(P_D) .
+\end{equation}
+\noindent where
+\begin{equation}
+l_M(P_D) = \sum_{k=1}^{Q_M} N(AP_k) \log\Pr(AP_k \mid P_D),
+\end{equation}
+\noindent and
+\begin{equation}
+\Pr(AP_k \mid P_D) = \sum_{i}\Pr(AP_k \mid \text{PART}_i)\Pr(\text{PART}_i \mid P_D).
+\end{equation}
+
+In these equations, $M$ is the size of our set of duplicate fragments, $\text{PART}_i$ is the $i^{th}$ potential partition of the duplicate fragments into the original molecules, $AP_k$ is the $k^{th}$ observable allele pattern, and $N(AP_k)$ is the number of times that the allele pattern has been observed.
+
+A worked example for M=4 is given in the main manuscript. An example for M=5 appears in Figure \ref{M5example}.
+
+\begin{figure*}[hp!]
+\begin{center}
+\includegraphics[width=\textwidth]{M5figureexample.pdf}
+\end{center}
+\caption{Worked example calculation of $\Pr(AP_k \mid P_D)$ for $M = 5$. There are seven identifiably distinct partitions of fragments into molecules. In panel A we have four PCR duplicates of a single fragment. In panel B there are two distinct duplicate fragments, one of which has three PCR duplicates, while panel C has two distinct duplicate fragments one of which has one PCR duplicate and one of which has two PCR duplicates. In panel D, there are three distinct duplicate fragments, one of which has two PCR duplicates and in panel E there are again three distinct fragments, two of which have a PCR duplicate. Panel F depicts the case where there are four distinct molecules, one of which has a PCR duplicate, and in panel G there are five distinct molecules with no PCR duplicates. The probabilities of the seven possible partitions $\Pr(\text{PART}_i \mid P_D)$ are shown, and for each partition the proportions in which the three possible observable allele patterns (AAAAA, AAAAB, AAABB) will arise are illustrated, allowing calculation of $\Pr(AP_k \mid P_D)$  For example $\Pr(\text{AAABB} \mid P_D) = P_D^3F_D + \frac{3}{4}P_D^2F_D^2
++ \frac{3}{2}P_D^2F_D^2 + 2P_DF_D^3 + \frac{10}{16}F_D^4$
+}
+\label{M5example}
+\end{figure*}
+
+The probabilities $\Pr(\text{PART}_i \mid P_D)$ are all of the form $aP_D^bF_D^c$ where $a$, $b$ and $c$ are to be determined. $b$ is clearly the number of PCR duplicates in the partition, and $c = M - b - 1$. 
+
+The calculation of $a$ is not always as clear. Given a partition of the $M$ fragments into $N$ molecules that provide $f_1$,$f_2$,...,$f_N$ fragments in turn ($f_i > 0 \forall i, \sum_i f_i = M$), we denote as $g_1$,$g_2$,...,$g_Q$ ($Q \leq N$) the set of unique values obtained by the ${f_i}$, and denote as $\nu_j$ the number of molecules contributing $g_j$ fragments $1 \leq j \leq Q$. The value of $a$ is then calculated as $a = N!/\prod_j \nu_j!$. 
+
+To give a concrete example: When there are four fragments ($M = 4$) partitioned amongst three molecules ($N=3$) such that $f_1 = 2$, $f_2 = 1$, and $f_3 = 1$, then $g_1 = 2$ and $\nu_1 = 1$ while $g_2 = 1$ and $\nu_2 = 2$. The value of $a$ is then $3!/(2!1!)=3$ as is confirmed in the recursive approach that follows.
+
+It is perhaps more clear if we derive these values recursively (as illustrated in Figure \ref{probderive}.), and this is the default option offered. When M=2 the partition probabilities are not controversial, being $P_D$ if a PCR duplicate is present and $F_D$ if two molecules are present. These probabilities sum to 1 as required. In each case we consider the addition of an additional fragment (a PCR duplicate with probability $P_D$ or a fragmentation duplicate with probability $F_D$). If the new fragment is a PCR duplicate, then it may be a duplicate of any of the existing molecules with equal probability and so the probabilities are shared accordingly.  
+
+\begin{figure*}[t]
+\begin{center}
+\includegraphics[width=\textwidth]{probderive.pdf}
+\end{center}
+\caption{Recursive calculation of partition probabilities}
+\label{probderive}
+\end{figure*}
+
+
+\clearpage{}
+\section{SNPs to extract}
+\label{sec:SNPs}
+\subsection{Choosing the SNPs}
+
+We investigate $2,500$ common SNPs in anticipation of identifying $1,000$ heterozygous sites for each sample. In this manner we avoid the burden of having to define a bespoke set of sites for each case.
+
+The SNPs were selected from UCSC's snp138Common table, considering only those validated by the $1000$ Genomes Project. We required the reported population minor allele frequency (MAF) of selected SNPs be $>0.49$ based on $>2,500$ observations and that the SNPs were located on one of the $24$ `regular' chromosomes. The $2,500$  SNPs were selected at random from all those meeting the criteria. 
+
+Despite these criteria, the true MAF can only be biased in one direction from the approximately $0.5$ we nominally required, and our sequencing depth and requirements for calling heterozygous SNPs in the data mean that we will fail to identify up to ten percent of heterozygous sites because, by chance, their observed allele frequencies will be too extreme. Additionally, $35$ of the randomly selected SNPs were from the sex chromosomes, and are `unlikely' to be heterozygous in our predominantly male patients. In combination, these effects mean that we can anticipate approximately $1,000$ of the SNPs to be heterozygous in each patient.
+
+By choosing a set of SNPs with high MAF, we can guarantee a good number of heterozygous observations in each sample, without the computational burden of defining a bespoke set of sites for each case. Extracting all reads mapping to these locations creates a BAM file that is approximately $10,000$ times smaller than the original and so allows for easy manipulation of large cohorts. We note that such a set of SNPs, and the BAM file they produce, are also useful for activities such as i) detecting sample contamination, ii) detecting sample mix ups, iii) detecting familial/ancestral relationships, and so have utility beyond our purposes in this study.
+
+We now load in the set of SNPs and explore them.
+
+<<LoadSNPlist>>=
+snplist<-read.delim(file.path(EDpath,"SNPstoextract.txt"),as.is=T,header=T)
+@
+
+
+\subsection{Representativeness of the SNPs}
+
+\subsubsection{Distribution across Chromosomes}
+We can see that the SNPs are chosen from all chromosomes (Figure \ref{duplicatessweave-AddFig1}), and that we are not far from having numbers proportional to chromosome length.
+
+<<AddFig1, fig=TRUE, include=FALSE, width=6, height=4>>=
+par(mar=c(4.6,4.1,1.6,1.6))
+plot(table(snplist$chrom)[c(1,12,16:22,2:11,13:15,23:24)], 
+     ylab="number of SNPs",xlab="chromosome",axes=F)
+axis(2)
+axis(1,labels=c(1:22,"X","Y"),at=1:24,las=2)
+box()
+@
+\incfig[h]{duplicatessweave-AddFig1}{\textwidth}{SNP numbers.}
+{The numbers of SNPs used from each chromosome.}
+
+\subsubsection{GC content}
+
+We take the locations of the $2,500$ SNPs in our list and place a window of $500$ bases around them, before counting the number of G and C bases in that window.
+
+<<SNPGCbias>>=
+genome <- Hsapiens
+GCNo<-rep(NA,2500)
+for(i in 1:2500){
+  GCNo[i]<-sum(unlist(strsplit(as.character(substr(genome[[snplist$chrom[i]]],snplist$chromEnd[i]-250,snplist$chromEnd[i]+249)),"")) %in% c("G","C"))
+}
+@
+
+For comparison, we take the human genome (chromosomes 1-22 and X), divide it up into bins of $500$ and calculate the proportion of bases that are G or C in each bin.
+
+<<GCrefgenome>>=
+GCbinned<-NULL
+for(k in 1:23){
+    windowViews <- trim(Views(genome[[k]], start = seq(1, length(genome[[k]]), 500), width = 500))
+    letterFreq <- letterFrequency(windowViews, letters = c("A","C","G","T"))
+    seqGC <- rowSums(letterFreq[,2:3]) / rowSums(letterFreq)
+    GCbinned<-c(GCbinned,seqGC)
+}
+@
+
+We see that the distribution of GC in our selection is a good representation of the GC content of the genome (with departure only in the final percentile).
+
+<<AddFigSNPGC, fig=TRUE, include=TRUE, width=8, height=4>>=
+par(mfrow=c(1,2))
+hist(GCbinned,freq=F,col=rgb(1,0.5,0.5,0.5),breaks=seq(0,1,0.02),main="Distribution of GC content of genome",xlab="GC proportion")
+hist(GCNo/500,freq=F,col=rgb(0.5,0.5,1,0.5),breaks=seq(0,1,0.02),add=T)
+legend("topright",fill=c(rgb(1,0.5,0.5,0.5),rgb(0.5,0.5,1,0.5)),legend=c("Genome-wide","Our SNPs"))
+
+plot(quantile(GCbinned,probs=seq(0.01,.99,0.01),na.rm=T),quantile(GCNo/500,probs=seq(.01,.99,0.01),na.rm=T),
+     pch=20,col="red",xlab="Genome wide 1st - 99th percentiles",
+     ylab="Our SNPs 1st - 99th percentiles",
+     main="Proportion GC Content\nKolmogorov-Smirnov p=0.08")
+for(i in 1:99){
+  GW<-quantile(GCbinned,probs=i/100,na.rm=T)
+  OS<-quantile(GCNo/500,probs=i/100,na.rm=T)
+lines(c(GW,GW),c(0,OS),lwd=0.5)  
+lines(c(0,GW),c(OS,OS),lwd=0.5)  
+}
+points(quantile(GCbinned,probs=seq(0.01,.99,0.01),na.rm=T),quantile(GCNo/500,probs=seq(.01,.99,0.01),na.rm=T),pch=20,col="red")
+abline(0,1,lwd=2)
+@
+
+Despite the power to detect deviation with this number of samples, the Kolmogorov-Smirnov test is not significant.
+
+<<KStest>>=
+ks.test(GCbinned,GCNo/500)
+@
+
+\subsection{Processing the SNPs}
+
+The following code will not be evaluated, as the patients' data are not distributed with this sweave, but can be obtained from the European Genome Archive (as previously noted). The summary data which are distributed are loaded in after this section, but the code here shows how they were created.
+
+First we identify the BAMs to be examined.
+<<Het SNP processing1,eval=FALSE>>=
+bamfilelist <- list.files("data/snpbams", pattern = ".bam$")
+@
+
+We know that in these data we only have to consider up to seven duplicates in a set. For other data sets it would be necessary to determine that this is sufficient. The manner in which the method could be extended to sets of 8, 9 ... etc. should be apparent.
+<<Het SNP processing2,eval=FALSE>>=
+ACvec<-c("2:0", "1:1" ,
+         "3:0" ,"2:1" ,
+         "4:0" ,"3:1" ,"2:2" ,
+         "5:0" ,"4:1" ,"3:2" ,
+         "6:0" ,"5:1" ,"4:2" ,"3:3" ,
+         "7:0" ,"6:1" ,"5:2" ,"4:3")
+@
+
+
+We prepare a matrix to contain the results
+<<Het SNP processing3,eval=FALSE>>=
+HetSNPTable<-matrix(0,nrow=length(bamfilelist),ncol=18)
+SNPnumbers<-rep(0,22)
+HSTrow<-0
+@
+
+Later, we are going to contrast the estimate obtained from SNPs in high-GC regions with that from those in low-GC regions. We prepare for this analysis now
+
+<<Het SNP processing3b,eval=FALSE>>=
+HetSNPTableHighGC<-matrix(0,nrow=length(bamfilelist),ncol=18)
+HetSNPTableLowGC<-matrix(0,nrow=length(bamfilelist),ncol=18)
+SNPnumbersHigh<-rep(0,22)
+SNPnumbersLow<-rep(0,22)
+@
+
+Now we cycle through and process each bam file
+<<Het SNP processing4,eval=FALSE>>=
+for(sample in bamfilelist){
+  HSTrow<-HSTrow+1
+  cat(sample,"\n")
+  bamfile=paste("../finaldupsanalysis/data/snpbams/",sample,sep="")
+  
+  # look to see which of the candidate SNPs is heterozygous in this sample. 
+  # Note that this is based on all the reads not just the duplicate fragments, 
+  # so should not greatly bias matters.
+  
+  fls <- PileupFiles(bamfile)  
+  which<-GRanges(snplist[1:2500,1],IRanges(snplist[1:2500,3],snplist[1:2500,3]))
+  PUP <- ApplyPileupsParam(which=which, yieldSize=1000000L, yieldBy="position", what="seq",maxDepth=200,minDepth=0)
+  outres <- applyPileups(fls,(function(x){x[["seq"]]}),param=PUP) 
+  
+  # Our requirement is that the minor allele frequency is greater than 0.4 - 
+  # quite a stringent criterion  
+  
+  usesnplist<-snplist[
+    which(apply((outres)[[1]],3,secondbiggest)/apply((outres)[[1]],3,sum)>0.4),]
+  
+    useGCNo<-GCNo[which(apply((outres)[[1]],3,secondbiggest)/apply((outres)[[1]],3,sum)>0.4)]
+    SNPnumbersHigh[HSTrow]<-sum(useGCNo>=199)
+    SNPnumbersLow[HSTrow]<-sum(useGCNo<199)
+
+  
+  SNPnumbers[HSTrow]<-dim(usesnplist)[1]
+  # now we are going to count up the numbers of duplicates that share the 
+  # same allele and the numbers that do not.
+  
+  truetally<-0
+  falsetally<-0
+  
+  store<-rep(0,dim(usesnplist)[1])
+  # for each allele on the list
+  for(snp in 1:dim(usesnplist)[1]){
+    newwhich<-GRanges(usesnplist[snp,1], IRanges(usesnplist[snp,3], usesnplist[snp,3]))
+    
+    #these are the reads that were marked as duplicates 
+    ydfile<-scanBam(bamfile, 
+                    param=ScanBamParam(flag=scanBamFlag(isDuplicate=T),
+                                       simpleCigar=T,what=c("pos","mpos","seq"),
+                                       which=newwhich))[[1]]
+    
+    #these are the reads that were not
+    ndfile<-scanBam(bamfile,
+                    param=ScanBamParam(flag=scanBamFlag(isDuplicate=F),
+                                       simpleCigar=T,what=c("pos","mpos","seq"),
+                                       which=newwhich))[[1]]
+    
+    # Any fragement marked as a duplicate must be a duplicate of a fragment 
+    # that is not marked as a duplicate. We just want to keep a matched set 
+    # of duplicates and the fragments of which they are duplicates
+    
+    ykey<-paste(ydfile$pos,ydfile$mpos)
+    nkey<-paste(ndfile$pos,ndfile$mpos)
+    
+    usekey<-unique(ykey)
+    
+    # Now, assuming that we see some duplicates, we are going to go through them 
+    # and compare the alleles
+    if(length(usekey)>0){
+      for(key in usekey){
+        
+        storealleles<-NULL
+        for(p in which(ykey==key)){
+          storealleles<-c(storealleles, substr(ydfile$seq[p], 
+                                               usesnplist[snp,3]-ydfile$pos[p]+1,
+                                               usesnplist[snp,3]-ydfile$pos[p]+1))
+        }
+        for(p in which(nkey==key)){
+          storealleles<-c(storealleles,substr(ndfile$seq[p],
+                                              usesnplist[snp,3]-ndfile$pos[p]+1,
+                                              usesnplist[snp,3]-ndfile$pos[p]+1))
+        }
+        
+        ortab<-outres[[1]][,,as.numeric(rownames(usesnplist)[snp])]
+        usebase<-names(sort(ortab,decreasing=T))[1:2]
+        
+        
+        allelecounts<-c(sum(storealleles==usebase[1]),sum(storealleles==usebase[2]))
+        if(allelecounts[2]>allelecounts[1]){allelecounts<-allelecounts[2:1]}
+        
+        HetSNPTable[HSTrow,match(paste(allelecounts,collapse=":"),ACvec)]<-
+          HetSNPTable[HSTrow,match(paste(allelecounts,collapse=":"),ACvec)]+1
+        if(useGCNo[snp]>=199){
+          HetSNPTableHighGC[HSTrow,match(paste(allelecounts,collapse=":"),ACvec)]<-
+            HetSNPTableHighGC[HSTrow,match(paste(allelecounts,collapse=":"),ACvec)]+1}
+          
+          if(useGCNo[snp]<199){
+            HetSNPTableLowGC[HSTrow,match(paste(allelecounts,collapse=":"),ACvec)]<-
+              HetSNPTableLowGC[HSTrow,match(paste(allelecounts,collapse=":"),ACvec)]+1}
+      }
+    }
+  }
+}
+@
+
+
+Finally we'll write out the table.
+<<Het SNP processing5,eval=FALSE>>=
+HetSNPTable<-cbind(SNPnumbers,HetSNPTable)
+HetSNPTableHighGC<-cbind(SNPnumbersHigh,HetSNPTableHighGC)
+HetSNPTableLowGC<-cbind(SNPnumbersLow,HetSNPTableLowGC)
+
+colnames(HetSNPTable)<-c("NoSNPs", "AA", "AB", 
+                           "AAA", "AAB", 
+                           "AAAA", "AAAB", "AABB", 
+                           "AAAAA", "AAAAB", "AAABB", 
+                           "AAAAAA", "AAAAAB", "AAAABB", "AAABBB", 
+                           "AAAAAAA", "AAAAAAB", "AAAAABB", "AAAABBB")
+colnames(HetSNPTableLowGC)<-c("NoSNPs", "AA", "AB", 
+                         "AAA", "AAB", 
+                         "AAAA", "AAAB", "AABB", 
+                         "AAAAA", "AAAAB", "AAABB", 
+                         "AAAAAA", "AAAAAB", "AAAABB", "AAABBB", 
+                         "AAAAAAA", "AAAAAAB", "AAAAABB", "AAAABBB")
+colnames(HetSNPTableHighGC)<-c("NoSNPs", "AA", "AB", 
+                         "AAA", "AAB", 
+                         "AAAA", "AAAB", "AABB", 
+                         "AAAAA", "AAAAB", "AAABB", 
+                         "AAAAAA", "AAAAAB", "AAAABB", "AAABBB", 
+                         "AAAAAAA", "AAAAAAB", "AAAAABB", "AAAABBB")
+write.table(HetSNPTable,file="HetSNPDups.txt",sep="\t")
+write.table(HetSNPTableHighGC,file="HetSNPDupsHighGC.txt",sep="\t")
+write.table(HetSNPTableLowGC,file="HetSNPDupsLowGC.txt",sep="\t")
+@
+
+\newpage
+\subsection{Exploration of SNP numbers}
+\subsubsection{Preliminaries}
+
+We now load in the summary of the numbers of SNPs being investigated, and generate the various results given in the section "SNP numbers and duplicate numbers" in the main manuscript.
+
+<<LoadSNPsummary1,eval=TRUE>>=
+HetSNPTable<-read.delim(file.path(EDpath,"HetSNPDups.txt"),as.is=T)
+@
+
+We define the duplicate rate as the number of duplicates identified within the unmasked regions of the genome divided by the number of read-pairs examined within those regions.
+
+<<LoadSNPsummary2,eval=TRUE>>=
+ResDupR<-readPairDuplicates[,9]/readPairsExamined[,9]
+@
+
+We define the residual read depth as 200 (the number of bases sequenced per read-pair) multiplied by the number of read-pairs examined, divided by the length of the unmasked genome.
+
+<<LoadSNPsummary3,eval=TRUE>>=
+ResDepth<-round(200*readPairsExamined[,9]/effectiveGenomeSize[9],2)
+@
+
+\subsubsection{How many SNPs do we see?}
+
+``From the 2,500 sites considered, the median number of heterozygous SNPs identified per sample is 1,009 (range 942 to 1,093).''
+<<LoadSNPsummary3,eval=TRUE>>=
+summary(HetSNPTable[,1])
+@
+
+``Average read depth (as measured by the number of reads mapping to the regions of the genome that we are not masking) is correlated with the number of heterozygous SNPs (correlation = 0.52, p = 0.014): a reflection on our stringent calling criterion.''
+<<LoadSNPsummary4,eval=TRUE>>=
+summary(lm(HetSNPTable[,1]~ResDepth+ResDupR))
+cor.test(ResDepth,HetSNPTable[,1])
+@
+
+\subsubsection{How many duplicates read pairs are we using?}
+
+``The number of sets of duplicate read fragments observed to overlie the heterozygous SNP sites varies from 950 to 6,740.''
+<<LoadSNPsummary5,eval=TRUE>>=
+summary(apply(HetSNPTable[,-1],1,sum))
+@
+``The number of duplicate sets is unsurprisingly dependent on the duplicate rate ($p = 3.2 x 10^{-14}$) and the depth of coverage ($p = 0.001$), but not directly on the number of heterozygous sites being considered (although this is correlated with the depth of coverage).''
+<<LoadSNPsummary6,eval=TRUE>>=
+summary(lm(apply(HetSNPTable[,-1],1,sum)~ResDupR+HetSNPTable[,1]+ResDepth))
+@
+
+\subsubsection{How do the duplicates read pairs break down into pairs, triples, etc.?}
+
+``Of the total of 61,272 sets of duplicate fragments identified among the 22 samples, ...''
+<<LoadSNPsummary7,eval=TRUE>>=
+sum(HetSNPTable[,-1])
+@
+
+``...the vast majority (57,883 or 94\%) are duplicate pairs,''
+<<LoadSNPsummary8,eval=TRUE>>=
+sum(HetSNPTable[,2:3])
+round(100*sum(HetSNPTable[,2:3])/sum(HetSNPTable[,-1]))
+@
+
+``...3,189 (5\%) are triples,...''
+<<LoadSNPsummary9,eval=TRUE>>=
+sum(HetSNPTable[,4:5])
+round(100*sum(HetSNPTable[,4:5])/sum(HetSNPTable[,-1]))
+@
+
+``...186 (0.3\%) are quartets,...'' 
+<<LoadSNPsummary10,eval=TRUE>>=
+sum(HetSNPTable[,6:8])
+round(100*sum(HetSNPTable[,6:8])/sum(HetSNPTable[,-1]),1)
+@
+
+``and the greatest number of fragments seen in a duplicate set is seven (one instance).''
+<<LoadSNPsummary11,eval=TRUE>>=
+sum(HetSNPTable[,16:19])
+@
+
+\section{Duplicate rate estimates}
+\label{sec:Estimates}
+\subsection{Estimating the fragmentation-duplicate proportion}
+
+To prepare for the probability calculations, we first generate the list of sets of partitions possible with each value of $M$ (the number of fragments in a duplicate set). As previously noted, $M = 7$ is the maximum observed in our data. 
+
+<<GenPL>>=
+partitionlist<-genPL(7)
+CoefList<-genCoefs(partitionlist)
+@
+
+Note that the time taken to generate the partition list is exponential in terms of $M$ (Figure \ref{duplicatessweave-TimeFig}). Note that we do not perform these timings within the sweave as it would be a disproportionate burden on compilation time, but rather we load in values observed previously. On a laptop of reasonable specification, with no parallelization, the list can be generated up to $M=60$ in reasonable time (under 10 minutes). Anybody fortunate enough to have depth of coverage such that this is not sufficient may need to streamline this approach. Note also that the recursive generation of coefficients is more expensive, but we have already seen that it is not necessary to perform the calculations in this manner.
+
+<<TimeFig, fig=TRUE, include=FALSE, width=6, height=4>>=
+PLtimes<-c(.001,.003,.007,.03,.119,.584,1.97,6.98,18.9,67.529,152.94,541.793)
+CLtimes<-c(.003,.052,1.088,16.711,212.698,NA,NA,NA,NA,NA,NA,NA)
+Mvals<-c(5,10,15,20,25,30,35,40,45,50,55,60)
+plot(Mvals,log10(PLtimes),ylab="time (seconds)",xlab="M",axes=F)
+axis(1)
+axis(2,10^seq(-3,2,1),at=seq(-3,2,1),las=2)
+box()
+points(Mvals,log10(CLtimes),pch=17)
+lm(log10(PLtimes)~Mvals)
+lm(log10(CLtimes)~Mvals)
+
+abline(-3.58,0.1071)
+abline(-3.7064,0.2442,lwd=2)
+
+legend("bottomright",pch=c(1,17),legend=c("Partition List","Coefficients"))
+@
+\incfig[h]{duplicatessweave-TimeFig}{\textwidth}{Time taken for calculations on a laptop with a 1.7 GHz Intel Core i5 processor and 4 GB 1333 MHz DDR3 memory. }
+
+We now calculate the maximum likelihood estimates of the proportions of duplicates that are fragmentation duplicates.
+
+<<EstimateFDvec,eval=TRUE>>=
+FDvec<-rep(0,22)
+for(j in 1:endloop){
+    myseq<-seq(0,0.2,length.out=1000)
+    vals <- sapply(myseq, propllik, x = HetSNPTable[j,-1])
+    FDvec[j]<-myseq[which.max(vals)]
+}
+@
+
+\subsection{The estimates}
+
+We generate three estimates of the duplication rate: the basic estimate that ignores all of the factors we have discussed in this document, the residual estimate that adopts the basic approach, but applied only to counts from regions of the genome that are not masked, and the Fragmentation-duplicate-corrected estimate. 
+
+<<EstimateDupRates,eval=TRUE>>=
+  BasicEst<-(readPairDuplicates[,1]-OpticalPairDuplicates[,1])/
+  (readPairsExamined[,1]-OpticalPairDuplicates[,1])
+  ResidEst<-(readPairDuplicates[,9]-OpticalPairDuplicates[,9])/
+  (readPairsExamined[,9]-OpticalPairDuplicates[,9])
+  FDCorEst<-(1-FDvec)*ResidEst
+@      
+
+
+We now generate Figure 2 from the main manuscript (Figure \ref{duplicatessweave-AddFig2} in this document).
+
+<<AddFig2, fig=TRUE, include=FALSE, width=8, height=6,eval=TRUE>>=
+  par(mfrow=c(1,2))
+  plot(c(1,3),c(0,0.15),type="n",ylab="duplicate rate",xlab="",axes=F,yaxs="i")
+  axis(2)
+  box()
+  for(i in seq(0,.15,.03)){
+    rect(-1,i-.015,5,i,border="grey95",col="grey95")
+  }
+  for(i in 1:22){
+    tcol<-"black"
+    if(WeaverSuppTable1[i,12]=="Blood"){tcol<-"red"}
+    lines(1:3,c(BasicEst[i],ResidEst[i],FDCorEst[i]),type="b",pch=16,col=tcol)
+  }
+  axis(1,at=1:3,labels=c("Standard\n estimate","Residual\n estimate","Corrected\n estimate"),las=3)
+  
+  plot(ResidEst/BasicEst,FDCorEst/ResidEst, xlab="Residual/Basic estimates",
+       ylab="Corrected/Residual estimates",pch=20)
+@
+\incfig[ht!]{duplicatessweave-AddFig2}{\textwidth}{The different estimates of duplication rate}
+
+\clearpage{}
+
+\section{Observations on consistency}
+
+\subsection{Confirming that the two approaches match when M equals 2}
+
+Since $M=2$, we only have two possible allele patterns, and we can write down $\Pr(AP_k | P_D)$ in a straightforward manner.
+\begin{align}
+P(AA \mid P_D) &= \frac{1}{2}(1+P_D)\\
+P(AB \mid P_D) &= \frac{1}{2}(1-P_D)
+\end{align}
+The log-likelihood is then
+\begin{equation}
+l(P_D) = n_{AA}\log(\frac{1}{2}(1+P_D))+n_{AB}\log(\frac{1}{2}(1-P_D)),
+\end{equation}
+\noindent and the first derivative is
+\begin{equation}
+\frac{dl}{dP_D} = \frac{n_{AA}}{(1+P_D)}+\frac{n_{AB}}{(1-P_D)}.
+\end{equation}
+If we look to find the MLE of $P_D$,
+\begin{equation}
+0 = n_{AA}(1-\hat{P}_D)+n_{AB}(1+\hat{P}_D),
+\end{equation}
+\noindent then we find it is equal to
+\begin{equation}
+\hat{P}_D = \frac{n_{AA}+n_{AB}}{N} = 1 - \frac{2n_{AB}}{N}
+\end{equation}
+\noindent as required to match equation \ref{eq:M2}.
+
+
+\subsection{The estimate is well-behaved when M equals 3}
+
+ The case when $M=3$ is depicted in Figure \ref{M3example}. In this simple case, there are only two patterns of alleles that can be observed: `AAA' and `AAB'.
+
+\begin{figure*}[tbh]
+\begin{center}
+\includegraphics[width=\textwidth]{SuppFigM3.pdf}
+\end{center}
+\caption{Details of the case when $M=3$.
+}
+\label{M3example}
+\end{figure*}
+
+
+The log-likelihood is then given as
+\begin{equation}
+l_3(P_D) = n_{AAA} \log(P(AAA \mid P_D)) + n_{AAB} \log(P(AAB \mid P_D)). 
+\end{equation}
+\noindent Since this is of the form 
+\begin{equation}
+l = n \log f(P_D) + m \log (1-f(P_D)),
+\end{equation}
+\noindent we can see that the first derivative is of the form 
+\begin{equation}
+n f'(P_D) - (n+m)f'(P_D)f(P_D)
+\end{equation}
+\noindent So, 
+\begin{equation}
+\begin{split}
+\frac{dl}{dP_D}=&n_{AAA}(\frac{1}{2}P_D+\frac{1}{2}) - \\&(n_{AAA}+n_{AAB})(\frac{1}{2}P_D+\frac{1}{2})(\frac{1}{4}P_D^2+\frac{1}{2}P_D+\frac{1}{4})
+\end{split}
+\end{equation}
+\noindent and since $P_D$ cannot equal $-1$, we have 
+\begin{equation}
+0 = \hat{P}_D^2 + 2\hat{P}_D + 1 -\frac{4n_{AAA}}{n_{AAA}+n_{AAB}}
+\end{equation}
+\noindent and
+\begin{equation} \label{eq:M3}
+\hat{P}_D = -1 \pm 2\sqrt{\frac{n_{AAA}}{n_{AAA}+n_{AAB}}}
+\end{equation}
+
+From Figure \ref{M3example}, we can see that for a large numbers of trios, $N = n_{AAA} + n_{AAB}$, $n_{AAA}$ will be approximately equal to $N (\frac{1}{4}P_D^2+\frac{1}{2}P_D+\frac{1}{4})$, which if substituted into the equation for $\hat{P}_D$ gives the estimate $\hat{P}_D = P_D$.
+
+\subsection{Inconsistency with a naive approach when M=3}
+
+Were we to adopt a naive approach, we might simply deal with cases where $M > 2$ by discarding all but 2 fragments in the set at random.
+
+If $M=3$ we would expect to see 
+
+\begin{align}
+n_{AA} &= n_{AAA}+\frac{1}{3}n_{AAB}\\
+n_{AB} &= \frac{2}{3}n_{AAB}
+\end{align}
+
+and so the estimate of $P_D$ will be 
+
+\begin{equation}
+\hat{P}_D = 1 - \frac{4n_{AAB}}{3N}
+\end{equation}
+
+which in general will not equal the estimate obtained from using all of the data (equation \ref{eq:M3}).
+
+\subsection{Agreement of estimate from M equal to 2, with estimate from M greater than 2}
+
+We can separate out the estimate when $M=2$ from that when $M>2$. First of all we calculate the estimates only from the $M=2$ data.
+
+<<WhenMis2, eval=TRUE>>=
+FDvec2<-rep(0,22)
+
+for(j in 1:endloop){
+  vals<-rep(0,1000)
+  myseq<-seq(0,0.2,length.out=1000)
+  for(i in 1:1000){
+    tmpx<-HetSNPTable[j,-1]
+    tmpx[3:18]<-0
+    vals[i]<-propllik(tmpx,myseq[i])
+  }
+  
+  FDvec2[j]<-myseq[which.max(vals)]
+}
+@
+
+and then from the $M>2$ data.
+
+<<WhenMisnot2, eval=TRUE>>=
+FDvecN2<-rep(0,22)
+
+for(j in 1:endloop){
+  vals<-rep(0,1000)
+  myseq<-seq(0,0.2,length.out=1000)
+  for(i in 1:1000){
+    tmpx<-HetSNPTable[j,-1]
+    tmpx[1:2]<-0
+    vals[i]<-propllik(tmpx,myseq[i])
+  }
+  
+  FDvecN2[j]<-myseq[which.max(vals)]
+}
+@
+
+
+If we do this, we see that while there is some noise (to be expected as we have seen that there is a 19:1 ratio in terms of the numbers of fragment sets from which we draw our estimates) there is no evidence of bias (Figure \ref{duplicatessweave-ConcFig}).
+
+
+<<ConcFig, fig=TRUE, include=FALSE, width=5, height=5,eval=TRUE>>=
+plot(FDvec2,FDvecN2,xlab="estimates from sets of 2 duplicate fragments",
+     ylab="estimates from sets of >2 duplicate fragments")
+abline(0,1)
+@
+\incfig[!h]{duplicatessweave-ConcFig}{0.7\textwidth}{Consistency of estimates from sets of 2 fragments and sets of more than 2 fragments.}
+
+
+\subsection{Agreement of estimate from High-GC SNPs, and Low-GC SNPs}
+
+We observe a median of $199 / 500$ Gs and Cs in our $2500$ SNP regions and so divide up the SNPs into two sets: i) the $1242$ SNP regions with GC content less than $199 / 500$, and ii) the $1258$ SNP regions with GC content of $199 / 500$ or greater. We first load in the summary tables of SNP pattern counts.
+
+<<LoadSNPsummary1,eval=TRUE>>=
+HetSNPTableHighGC<-read.delim(file.path(EDpath,"HetSNPDupsHighGC.txt"),as.is=T)
+HetSNPTableLowGC<-read.delim(file.path(EDpath,"HetSNPDupsLowGC.txt"),as.is=T)
+@
+
+We now process both tables using the methods developed for the main table. 
+
+<<GCComparison, eval=TRUE>>=
+FDvecHigh<-rep(0,22)
+FDvecLow<-rep(0,22)
+for(j in 1:22){
+  #cat(j,"\t")
+  myseq<-seq(0,0.2,length.out=1000)
+  valsHigh <- sapply(myseq, propllik, x = HetSNPTableHighGC[j,-1])
+  valsLow <- sapply(myseq, propllik, x = HetSNPTableLowGC[j,-1])
+  FDvecHigh[j]<-myseq[which.max(valsHigh)]
+  FDvecLow[j]<-myseq[which.max(valsLow)]
+}
+@
+
+We note that there is good agreement, and no evidence of bias, in the estimate of the proportion of fragmentation duplicates when we compare the high-GC and low-GC values.
+
+<<GCCompFig, fig=TRUE, include=TRUE, width=5, height=5,eval=TRUE>>=
+  plot(FDvecHigh,FDvecLow,xlab="estimates from duplicates in 'high GC' regions",
+       ylab="estimates from duplicates in 'low GC' regions")
+abline(0,1)
+@
+
+\clearpage{}
+
+\section{Example for a tumour sample}
+\label{sec:Tumour}
+\subsection{The Sample}
+
+We have, until now, been considering normal (diploid) samples. We now demonstrate the approach applied to a tumour sample: Case SS6003314 from the same paper and manuscript as the normal data. SS6003314 is a broadly tetraploid tumour with approximately $74\%$ cellularity. It has some regions exhibiting sub-clonal copy number changes, but when we plot minor allele frequency against tumour depth \ref{Tumourexample}, it notably has clear areas of diploid allelic-balance (AB), and tetraploid allelic-balance (AABB). Bed files defining these regions (\texttt{ABbed.bed} and \texttt{AABBbed.bed}) are included in the \texttt{extdata} folder of the LynchSmithEldridgeTavareFragDup package.
+
+\begin{figure*}[tbh]
+\begin{center}
+\includegraphics[width=\textwidth]{SS6003314.pdf}
+\end{center}
+\caption{A plot of minor allele frequency against sequencing depth reveals regions of consistent copy number.
+}
+\label{Tumourexample}
+\end{figure*}
+
+We load in Picard data for the entire library (duplicate rate: $5.2\%$), and for two sets of regions: i) The regions that are classified as AB (after removing masked regions - duplicate rate: $3.7\%$), and ii) The regions that are classified as AABB (after removing masked regions - duplicate rate: $3.8\%$). Note that this is a low duplication rate compared to those observed in libraries from normal tissue/blood. We attribute the change going from the entire library to the subsets as being due to the removal of masked regions; the AABB regions alone represent more than half of the sequencing library. We expect there to be a higher duplication rate in the AABB regions than in the AB region because of fragmentation duplicates. That it is such a small change suggests that the fragmentation duplicate rate will be small in this case.
+
+<<LoadTumourPicardData,eval=TRUE>>=
+TumourPicard<-read.csv(file.path(EDpath,"Tumour","Picard.csv"),as.is=T)
+TumourPicard
+# and the duplicate rates
+round((TumourPicard[,6]-TumourPicard[,7])/(TumourPicard[,3]-TumourPicard[,7]),3)
+@
+
+\subsection{The SNPs}
+
+Tumour samples require bespoke lists, so we restrict ourselves to sites that we know to be heterozygous. We can define two sets of heterozygous SNPs for the AB ($985$ SNPs), and AABB (a sample of $10,000$ SNPs)  regions. 
+
+<<TumourSNPlists,eval=TRUE>>=
+snplistAABB<-read.delim(file.path(EDpath,"Tumour","usedupAABB.txt"),as.is=T,header=F)
+snplistAABB<-snplistAABB[,c(1,2,2)]
+snplistAB<-read.delim(file.path(EDpath,"Tumour","usedupAB.txt"),as.is=T,header=F)
+snplistAB<-snplistAB[,c(1,2,2)]
+@
+
+
+\subsection{Counting the duplicates}
+
+As before, we are unable to distribute the raw data, which are archived in the European Genome Archive [\href{https://www.ebi.ac.uk/ega/datasets/EGAD00001000704}{EGA:EGAD00001000704}]. The following code will generate the summary table in the manner we have come to expect.
+
+<<ProcessTumourBam,eval=FALSE>>=
+
+HetSNPTableAABB<-matrix(0,nrow=2,ncol=18)
+bamfile="SS6003314.bam"
+usesnplist<-snplistAABB
+
+#SNPnumbers[HSTrow]<-dim(usesnplist)[1]
+# now we are going to count up the numbers of duplicates that share the 
+# same allele and the numbers that do not.
+
+# for each allele on the list
+for(snp in 1:dim(usesnplist)[1]){
+  if(100*trunc(snp/100)==snp){cat(snp,"\t")}
+  newwhich<-GRanges(usesnplist[snp,1], IRanges(usesnplist[snp,3], usesnplist[snp,3]))
+  
+  #these are the reads that were marked as duplicates 
+  ydfile<-scanBam(bamfile, 
+                  param=ScanBamParam(flag=scanBamFlag(isDuplicate=T),
+                                     simpleCigar=T,what=c("pos","mpos","seq"),
+                                     which=newwhich))[[1]]
+  
+  #these are the reads that were not
+  ndfile<-scanBam(bamfile,
+                  param=ScanBamParam(flag=scanBamFlag(isDuplicate=F),
+                                     simpleCigar=T,what=c("pos","mpos","seq"),
+                                     which=newwhich))[[1]]
+  
+  # Any fragement marked as a duplicate must be a duplicate of a fragment 
+  # that is not marked as a duplicate. We just want to keep a matched set 
+  # of duplicates and the fragments of which they are duplicates
+  
+  ykey<-paste(ydfile$pos,ydfile$mpos)
+  nkey<-paste(ndfile$pos,ndfile$mpos)
+  
+  usekey<-unique(ykey)
+  
+  # Now, assuming that we see some duplicates, we are going to go through them 
+  # and compare the alleles
+  if(length(usekey)>0){
+    for(key in usekey){
+      
+      storealleles<-NULL
+      for(p in which(ykey==key)){
+        storealleles<-c(storealleles, substr(ydfile$seq[p], 
+                                             usesnplist[snp,3]-ydfile$pos[p]+1,
+                                             usesnplist[snp,3]-ydfile$pos[p]+1))
+      }
+      for(p in which(nkey==key)){
+        storealleles<-c(storealleles,substr(ndfile$seq[p],
+                                            usesnplist[snp,3]-ndfile$pos[p]+1,
+                                            usesnplist[snp,3]-ndfile$pos[p]+1))
+      }
+      
+      ortab<-outres[[1]][,,as.numeric(rownames(usesnplist)[snp])]
+      usebase<-names(sort(ortab,decreasing=T))[1:2]
+      
+      
+      allelecounts<-c(sum(storealleles==usebase[1]),sum(storealleles==usebase[2]))
+      if(allelecounts[2]>allelecounts[1]){allelecounts<-allelecounts[2:1]}
+      
+      HetSNPTableAABB[1,match(paste(allelecounts,collapse=":"),ACvec)]<-
+        HetSNPTableAABB[1,match(paste(allelecounts,collapse=":"),ACvec)]+1
+    }
+  }
+}
+
+
+
+usesnplist<-snplistAB
+
+#SNPnumbers[HSTrow]<-dim(usesnplist)[1]
+# now we are going to count up the numbers of duplicates that share the 
+# same allele and the numbers that do not.
+
+# for each allele on the list
+for(snp in 1:dim(usesnplist)[1]){
+  if(100*trunc(snp/100)==snp){cat(snp,"\t")}
+  newwhich<-GRanges(usesnplist[snp,1], IRanges(usesnplist[snp,3], usesnplist[snp,3]))
+  
+  #these are the reads that were marked as duplicates 
+  ydfile<-scanBam(bamfile, 
+                  param=ScanBamParam(flag=scanBamFlag(isDuplicate=T),
+                                     simpleCigar=T,what=c("pos","mpos","seq"),
+                                     which=newwhich))[[1]]
+  
+  #these are the reads that were not
+  ndfile<-scanBam(bamfile,
+                  param=ScanBamParam(flag=scanBamFlag(isDuplicate=F),
+                                     simpleCigar=T,what=c("pos","mpos","seq"),
+                                     which=newwhich))[[1]]
+  
+  # Any fragement marked as a duplicate must be a duplicate of a fragment 
+  # that is not marked as a duplicate. We just want to keep a matched set 
+  # of duplicates and the fragments of which they are duplicates
+  
+  ykey<-paste(ydfile$pos,ydfile$mpos)
+  nkey<-paste(ndfile$pos,ndfile$mpos)
+  
+  usekey<-unique(ykey)
+  
+  # Now, assuming that we see some duplicates, we are going to go through them 
+  # and compare the alleles
+  if(length(usekey)>0){
+    for(key in usekey){
+      
+      storealleles<-NULL
+      for(p in which(ykey==key)){
+        storealleles<-c(storealleles, substr(ydfile$seq[p], 
+                                             usesnplist[snp,3]-ydfile$pos[p]+1,
+                                             usesnplist[snp,3]-ydfile$pos[p]+1))
+      }
+      for(p in which(nkey==key)){
+        storealleles<-c(storealleles,substr(ndfile$seq[p],
+                                            usesnplist[snp,3]-ndfile$pos[p]+1,
+                                            usesnplist[snp,3]-ndfile$pos[p]+1))
+      }
+      
+      ortab<-outres[[1]][,,as.numeric(rownames(usesnplist)[snp])]
+      usebase<-names(sort(ortab,decreasing=T))[1:2]
+      
+      
+      allelecounts<-c(sum(storealleles==usebase[1]),sum(storealleles==usebase[2]))
+      if(allelecounts[2]>allelecounts[1]){allelecounts<-allelecounts[2:1]}
+      
+      HetSNPTableAABB[2,match(paste(allelecounts,collapse=":"),ACvec)]<-
+        HetSNPTableAABB[2,match(paste(allelecounts,collapse=":"),ACvec)]+1
+    }
+  }
+}
+
+HetSNPTableAABB<-cbind(c(10000,985),HetSNPTableAABB)
+
+colnames(HetSNPTableAABB)<-c("NoSNPs", "AA", "AB", 
+                         "AAA", "AAB", 
+                         "AAAA", "AAAB", "AABB", 
+                         "AAAAA", "AAAAB", "AAABB", 
+                         "AAAAAA", "AAAAAB", "AAAABB", "AAABBB", 
+                         "AAAAAAA", "AAAAAAB", "AAAAABB", "AAAABBB")
+rownames(HetSNPTableAABB)<-c("AABB","AB")
+write.table(HetSNPTableAABB,file="HetSNPDupsCancer.txt",sep="\t")
+@
+
+Assuming that the user hasn't obtained the raw data, we now load in the precompiled summary table.
+
+<<LoadSNPsummaryTumour,eval=TRUE>>=
+HetSNPTableAABB<-read.delim(file.path(EDpath,"Tumour","HetSNPDupsCancer.txt"),as.is=T)
+@
+
+\subsection{Estimating the fragmentation duplicate proportion}
+
+Processing this in the same manner as previous allele pattern counts...
+
+<<ProcessTumourPatterns,eval=TRUE>>=
+FDvecCancer<-rep(0,2)
+for(j in 1:2){
+  cat(j,"\t")
+  vals<-rep(0,1000)
+  myseq<-seq(0,0.2,length.out=1000)
+  for(i in 1:1000){
+    vals[i]<-propllik(HetSNPTableAABB[j,-1],myseq[i])
+   }
+  FDvecCancer[j]<-myseq[which.max(vals)]
+}
+@
+
+...we see that the fragmentation duplicate rate is higher in the AABB region than the AB region.
+
+<<TumourFradDup,eval=TRUE>>=
+FDvecCancer
+@
+
+Investigating the impact this has on our estimates of PCR duplication rate:
+
+<<TumourConsequences,eval=TRUE>>=
+# What were our PCR duplication rate estimates from Picard?
+BasicAABB<-(TumourPicard[3,6]-TumourPicard[3,7])/(TumourPicard[3,3]-TumourPicard[3,7])
+BasicAB<-(TumourPicard[2,6]-TumourPicard[2,7])/(TumourPicard[2,3]-TumourPicard[2,7])
+
+# What are our corrected estimates?
+CorAB<-(1-FDvecCancer[2])*BasicAB
+CorAABB<-(1-FDvecCancer[1])*BasicAABB
+
+# How much closer are they?
+
+BasicAABB-BasicAB
+CorAABB-CorAB
+(BasicAABB-BasicAB)/(CorAABB-CorAB)
+@
+
+
+The difference between the two estimates has halved (and that in the context of smaller estimates). Given the noise inherrent in the estimate from the smaller AB region, the corrected estimates from the AABB and AB regions are remarkably consistent.
+
+\subsection{Extending to regions that are not in allelic balance}
+
+We have demonstrated the approach only in genomic regions of allelic balance, but in theory this could be extended to any region where both alleles are present in the library (which due to contamination from normal cells, will still allow for regions that exhibit loss of heterozygosity in the tumour). 
+
+The added complication comes in the form of $\Pr(AP_k \mid \text{PART}_i)$ (see section \ref{subsec:Case2}). Consider the case where we have two duplicate reads from the partition into two different molecules. Without loss of generailty let the alleles at the SNP of interest be C and T. Currently we only consider two possible allele patterns \texttt{AA} representing the posibilities CC and TT and \texttt{AB} representing CT and TC. Since the probability of each allele is $\frac{1}{2}$ we say that the probability of the \texttt{AA} pattern is also $\frac{1}{2} = 0.5^2 + 0.5^2$. 
+
+Now if the allelic proportions are in fact $0.25$ and $0.75$, then we have two options:
+
+\begin{itemize}
+
+\item We still consider only two allele patterns, but the probability of the AA pattern is now $0.25^2 + 0.75^2 = 0.625$
+
+\item We can confidently associate probabilities with specific alleles (e.g through phasing we may be confident that it is the C allele present in $75\%$ of molecules) in which case we would now consider three allele patterns \texttt{CC}, \texttt{CT}, \texttt{TT} with probabilities $0.5625$, $0.375$ and $0.0625$ respectively.
+
+\end{itemize}
+
+The second option is more powerful than the first, but would require a not insubstantial effort to ensure that the probabilities are matched to SNPs correctly. In both cases, since fragmentation duplicates are more inclined to share the same allele than when we have allelic balance, the analysis will be less powerful than when we have allelic balance. In studies of human tumours we have thus far always been able to identify regions of the genome in allelic balance, but we acknowledge that there is the potential need to go down this route of studying regions of allelic imbalance, and that indeed it may be a prerequisite for application of these methods to other organisms.
+
+Note that for any sizeable segment of genome in the same state, we can empirically estimate the allelic fraction with enough precision that our methods will be useful, and so this does not cause problems.
+
+\section{Complexity estimates}
+
+
+If the library complexity is $X$, the number of read-pairs sequenced is $N$, and the  duplicate rate is denoted by $R_D$, then our estimate of $X$ is obtained by solving
+\begin{equation}  \label{calcX}
+R_D = \frac{X}{N}\exp\left(-\frac{N}{X}\right)+1-\frac{X}{N}
+\end{equation}
+\noindent using numerical methods. To obtain a starting point for the search, we use the closed form estimate based on a Maclaurin expansion $X = N/(2R_D)$.
+
+
+<<GetCEME,eval=TRUE>>=
+CEME<-rep(22,0)
+for(i in 1:22){
+  R<-BasicEst[i]
+  CEME[i]<-(readPairsExamined[i,1]--OpticalPairDuplicates[i,1])/(2*R)
+}
+@
+ 
+Now we obtain the complexity estimate using the basic estimate of the duplicate rate,
+
+<<GetCEbasic,eval=TRUE>>=  
+CEbasic<-rep(22,0)
+for(i in 1:22){
+  R<-BasicEst[i]
+  N<-readPairsExamined[i,1]-OpticalPairDuplicates[i,1]
+  startX<-CEME[i]
+  CEbasic[i]<-optim(startX,libCompNewParam,R=R,N=N)$par
+}
+@
+
+\noindent and the complexity estimate using the residual estimate of the duplicate rate,
+<<GetCEresid,eval=TRUE>>=  
+CEresid<-rep(22,0)
+for(i in 1:22){
+  R<-ResidEst[i]
+  N<-readPairsExamined[i,1]-OpticalPairDuplicates[i,1]
+  startX<-CEME[i]
+  CEresid[i]<-optim(startX,libCompNewParam,R=R,N=N)$par
+}
+@
+
+\noindent and the complexity estimate using the fragmentation-duplicate-corrected estimate of the duplicate rate. The increase in estimated complexity using the better estimate of duplicate rate is explored here. Figures will be generated after a mitochondrial interlude.
+
+<<GetCEFDCor,eval=TRUE>>=  
+CEFDCor<-rep(22,0)
+for(i in 1:22){
+  R<-FDCorEst[i]
+  N<-readPairsExamined[i,1]-OpticalPairDuplicates[i,1]
+  startX<-CEME[i]
+  CEFDCor[i]<-optim(startX,libCompNewParam,R=R,N=N)$par
+}
+@
+
+In all cases the basic estimate is lower than our best estimate of the library complexity (with factors ranging from 1.14 to 2.15) 
+<<GetCEFDCor2,eval=TRUE>>=  
+summary(CEFDCor/CEbasic)
+@
+  
+  \section{Mitochondria}
+
+We revisit the Picard output from the mitochondrial mask discussed in the ``Sample Information'' section. In doing so we will create an object entitled \texttt{PicardMito} as described below.
+  
+<<Mito1>>=  
+lf<-read.delim(file.path(EDpath,"Picard",metfiles[3]),as.is=T)
+lf<-lf[-(15:19),]
+@
+
+The Picard duplicate rate (column 4 of our PicardMito object) incorporates `unpaired' reads into its calculation. These are even more affected by fragmentation duplicates than are read-pairs (see column 6 of the PicardMito object for the `unpaired' read duplicate rate), and so we also record the read-pairs only duplicate rate estimate (column 5 of PicardMito). We also recycle the residual depth of coverage estimates from the ``Exploration of SNP numbers'' section, but adjust it for the estimate of PCR duplicates we have subsequently calculated.
+
+<<Mito2,eval=TRUE>>=  
+PicardMito<-cbind(sapply(lf[,1],substr,1,9),lf[,c(3,6,8)],
+                  as.numeric(lf[,6])/as.numeric(lf[,3]),
+                  as.numeric(lf[,5])/as.numeric(lf[,2]),ResDepth*(1-FDCorEst))
+@
+
+We have already estimated the PCR duplicate rate for these samples, so we calculate a duplicate-adjusted number of read-pairs for the mitochondrial genome. 
+
+<<Mito3,eval=TRUE>>=  
+PicardMito<-cbind(PicardMito,as.numeric(PicardMito[,2])*(1-FDCorEst))
+@
+
+Since a read-pair provides 200 bases of sequence, the residual depth of coverage is for a diploid state so we have an additional factor of 2. Assuming the mitochondrial genome to be 16569 bases in length, we estimate the mitochondrial copy number without removing duplicates.
+
+<<Mito4,eval=TRUE>>=  
+PicardMito<-cbind(PicardMito,as.numeric(PicardMito[,2])*400/(as.numeric(PicardMito[,7])*16569))
+@
+
+We then estimate the mitochondrial copy number twice more, once removing all duplicates, and once adjusting for our estimated PCR duplicate rate.
+
+<<Mito5,eval=TRUE>>=  
+PicardMito<-cbind(PicardMito,
+                  (as.numeric(PicardMito[,2])-as.numeric(PicardMito[,3]))
+                  *400/(as.numeric(PicardMito[,7])*16569))
+PicardMito<-cbind(PicardMito,as.numeric(PicardMito[,8])*400/(as.numeric(PicardMito[,7])*16569))
+                  
+colnames(PicardMito)<-c("Library","ReadPairs","Duplicates","PicardRate",
+                        "BetterRate","UnpairedRate","ResCoverage",
+                        "CorrectedDuplicateReadPairs","MTCNignoredups",
+                        "MTCNremdups","MTCNcordups")
+@
+
+Now we produce Figure 3 from the paper (Figure \ref{duplicatessweave-AddFig3} in this document), combining complexity and mitochondrial copy number results.
+
+<<AddFig3, fig=TRUE, include=FALSE, width=8, height=6,eval=TRUE>>=
+par(mfrow=c(1,2))
+
+plot(c(1,3),c(3,30),type="n",ylab="Library complexity estimate (billions)",xlab="",axes=F)
+axis(2)
+box()
+for(i in seq(0,40,2)){
+  rect(-1,i-1,5,i,border="grey95",col="grey95")
+}
+for(i in 1:22){
+  tcol<-"black"
+  if(WeaverSuppTable1[i,12]=="Blood"){tcol<-"red"}
+  lines(1:3,c(CEbasic[i],CEresid[i],CEFDCor[i])/(10^9),type="b",pch=16,col=tcol)
+}
+axis(1,at=1:3,labels=c("Basic\nduplicate\nestimate",
+                       "Residual\nduplicate\nestimate",
+                       "Corrected\nestimate"),las=3)
+
+plot(c(1,3),c(60,800),type="n",ylab="MtDNA copy number",xlab="",axes=F)
+axis(2)
+box()
+for(i in seq(0,800,200)){
+  rect(-1,i-100,5,i,border="grey95",col="grey95")
+}
+for(i in 1:22){
+  tcol<-"black"
+  if(WeaverSuppTable1[i,12]=="Blood"){tcol<-"red"}
+  lines(1:3,(as.numeric(PicardMito[i,c(9,11,10)])),type="b",pch=16,col=tcol)
+}
+axis(1,at=1:3,labels=c("No\nduplicates\nremoved","New\nestimate","All\nduplicates\nremoved"),las=3)
+@
+\incfig[htbp!]{duplicatessweave-AddFig3}{\textwidth}{Effects on complexity and mtDNA copy number estimates}
+
+
+\clearpage{}
+\section{Session Info}
+
+For updates to this package/document, please visit www.compbio.group.cam.ac.uk.
+
+<<Session Info,results=tex, print=TRUE>>=
+toLatex(sessionInfo())
+@
+
+
+\end{document}
