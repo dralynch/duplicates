@@ -1,0 +1,122 @@
+% !Rnw root = duplicatessweave.Rnw
+
+
+
+We are considering twenty-two `normal' samples from patients forming part of the \href{http://www.compbio.group.cam.ac.uk/research/icgc}{Oesophageal Adenocarcinoma ICGC} study run by the \href{http://www.mrc-cu.cam.ac.uk/our\_research/Rebecca\_Fitzgerald/occams.html}{OCCAMS Consortium}. The full data for these samples are archived in the European Genome Archive [\href{https://www.ebi.ac.uk/ega/datasets/EGAD00001000704}{EGA:EGAD00001000704}] and have featured in the paper \href{http://www.nature.com/ng/journal/v46/n8/abs/ng.3013.html}{Ordering of mutations in preinvasive disease stages of esophageal carcinogenesis}. 
+
+Of the twenty-two samples, twelve were blood, and ten were oesophageal tissue. DNA from oesophageal tissue was extracted using the DNeasy kit (Qiagen) and from blood using the NucleonTM Genomic Extraction kit (Gen-Probe) (according to the manufacturer's instructions). 
+
+The sequencing was conducted under contract by Illumina, typically comprising five lanes of 100bp paired end sequencing. The depth of coverage ranges from $57$x to $87$x with a mean of $68$x.
+
+In addition, we use one tumour sample from the same study. 
+
+This study is a presentation of analysis methods not a presentation of the sequencing data, and raw data that could identify the patients is not provided. Sufficient data are provided to illustrate the methods presented. Further access is via the Project's Data Access Committee. 
+
+
+
+\subsection{Picard}
+
+Picard was applied to the raw bam files, and from this output we extract data on the number of read pairs examined, the numbers of read pairs marked as duplicates, and the number of read pairs marked as optical duplicates. We keep the full results for incorporation into Table 1.
+
+
+<<PicardUnmasked>>=
+unmaskedP<-read.delim(file.path(EDpath,"Picard", "samples.metrics.txt"),as.is=T)
+readPairsExamined <- readPairDuplicates <- OpticalPairDuplicates <- matrix(ncol=9, nrow=22, dimnames = list(unmaskedP[,1], c("Total", "X", "Y", "M", "Centromeres", "Telomeres", "LowCov", "HighCov", "Residual")))
+readPairsExamined[,1]<-unmaskedP[,3]
+readPairDuplicates[,1]<-unmaskedP[,6]
+OpticalPairDuplicates[,1]<-unmaskedP[,7]
+@
+
+
+\subsubsection{Generate Table 1}
+
+We read in supplementary table 1 from Weaver et al, and extract the information of interest to us.
+
+<<ReadWeaver,eval=TRUE>>=
+WeaverSuppTable1<-read.delim(file.path(EDpath,"WeaverSuppTable1.txt"),sep="",header=T,as.is=T)
+WeaverSuppTable1$CaseID<-WeaverSuppTable1$CaseID-1
+@
+
+Next we collect the information for Table 1 of the main manuscript, and prepare it for insertion into the LaTeX document.
+
+<<GenTable1,eval=TRUE,results=tex>>=
+Table1<-cbind(WeaverSuppTable1[,1],WeaverSuppTable1[,2],WeaverSuppTable1[,12],round(unmaskedP[,3]/1000000000,2),round(100*unmaskedP[,6]/unmaskedP[,3],2),round(unmaskedP[,9]/1000000000,2))
+Table1[Table1=="NormalOesophagus"]<-"NormalOes"
+colnames(Table1)<-c("ID","Sex","Tissue","Reads (10^9)","Dup. Rate (%)","Library Size (10^9)")
+xtab1<-xtable(Table1)
+write(print(xtab1,include.rownames = FALSE),file="Table1.txt")
+@
+
+We will define four groups based on sex and the origin of the tissue/DNA extraction kit used.
+
+<<ExploreSI2>>=
+table(WeaverSuppTable1[,2],WeaverSuppTable1[,12])
+Group<-1+2*(WeaverSuppTable1[,2]=="Male")+(WeaverSuppTable1[,12]=="Blood")
+GroupN<-c("Female_Tissue","Female_Blood","Male_Tissue","Male_Blood")[Group]
+@
+
+\subsubsection{Masks}
+
+The proportion of duplicate reads that are due to coincidental fragmentation is not constant along the genome due to changes in copy number and mapping accuracy. We attempt to restrict ourselves to regions where this proportion will be constant by masking areas that are likely to be problematic. The regions that we mask out of the genome for this study are defined in the \file{.bed} files in this package. For instance, the Centromeres are masked out by the 4th mask file. For further reference, we will record the total genome size, sizes of masked regions, and the remainder (residual).
+
+<<exploreMasks,eval=TRUE>>=
+list.files(file.path(EDpath,"masks"))
+maskFiles <- list.files(file.path(EDpath,"masks"), full.names = TRUE)
+MASKS <- lapply(maskFiles, read.delim, header=FALSE, as.is=TRUE, skip=1)
+effectiveGenomeSize<-rep(0,9)
+effectiveGenomeSize[1]<-sum(as.numeric(MASKS[[5]][17:38,3]))
++MASKS[[1]][1,3]+MASKS[[2]][1,3]+MASKS[[3]][1,3]
+for(i in 1:7){ 
+    effectiveGenomeSize[i+1] <- sum(MASKS[[i]][,3] - MASKS[[i]][,2])}
+effectiveGenomeSize[9]<-effectiveGenomeSize[1]-sum(effectiveGenomeSize[2:8])
+@
+
+Note that there is no real penalty for masking too much of the genome, as we have seen that only 1000 heterozygous SNPs are required, which suggests that less than $0.1\%$ of the genome is required.
+
+\subsubsection{Picard Output}
+
+Picard was run on bam files defined by these masks (separately for each mask) and we read these data into the matrices created earlier, before creating Table 2 in the paper.
+
+We only use the "READ\_PAIRS\_EXAMINED", "READ\_PAIR\_DUPLICATES", and "READ\_PAIR\_OPTICAL\_DUPLICATES" values that Picard produces (as indeed does Picard for this problem). For simplicity, we create three tables to take these values and store in them the Picard output for the entire samples, and then also for Picard output generated from the masked regions.
+
+<<PicardMasked,eval=TRUE>>=
+metfiles<-list.files(file.path(EDpath,"Picard"))
+metfiles<-grep("mask",metfiles,value=T)
+
+for(i in 1:7){
+  temp<-read.delim(file.path(EDpath,"Picard",metfiles[i]),as.is=T)
+  temp<-temp[-(15:19),]
+  readPairsExamined[,i+1]<-temp[,3]
+  readPairDuplicates[,i+1]<-temp[,6]
+  OpticalPairDuplicates[,i+1]<-temp[,7]
+}
+@
+
+We now calculate the 'residual' counts by subtracting the masked regions from the total.
+
+<<PicardResid,eval=TRUE>>=
+readPairsExamined[,9]<-readPairsExamined[,1]-apply(readPairsExamined[,2:8],1,sum)
+readPairDuplicates[,9]<-readPairDuplicates[,1]-apply(readPairDuplicates[,2:8],1,sum)
+OpticalPairDuplicates[,9]<-OpticalPairDuplicates[,1]-apply(OpticalPairDuplicates[,2:8],1,sum)
+@
+
+
+\subsubsection{Generate Table 2}
+
+Now we report the residual values and the numbers for the masked regions relative to the residual values. This is Table 2 of the main manuscript. 
+
+<<PicardTable2,eval=TRUE,results=tex>>=
+reptable<-matrix(0,ncol=4,nrow=8)
+reptable[1,]<-round(100*sapply(split(((readPairDuplicates[,9]/readPairsExamined[,9])),Group),mean),2)
+for(i in 2:8){
+  reptable[i,]<-round(sapply(split((
+    (readPairDuplicates[,i]/readPairsExamined[,i])
+    /(readPairDuplicates[,9]/readPairsExamined[,9])),Group),mean),2)
+}
+reptable[3,1:2]<-"-"
+rownames(reptable)<-c("Residual","X","Y","M","Centromeres","Telomeres","Low Cov","High Cov")
+colnames(reptable)<-c("Female Tissue","Female Blood","Male Tissue","Male Blood")
+write(print(xtable(reptable)),file="Table2.txt")
+@
+
+

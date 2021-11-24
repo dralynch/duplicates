@@ -1,0 +1,97 @@
+% !Rnw root = duplicatessweave.Rnw
+
+
+\subsection{The Sample}
+
+We have, until now, been considering normal (diploid) samples. We now demonstrate the approach applied to a tumour sample: Case SS6003314 from the same paper and manuscript as the normal data. SS6003314 is a broadly tetraploid tumour with approximately $74\%$ cellularity. It has some regions exhibiting sub-clonal copy number changes, but when we plot minor allele frequency against tumour depth \ref{Tumourexample}, it notably has clear areas of diploid allelic-balance (AB), and tetraploid allelic-balance (AABB). Bed files defining these regions (\texttt{ABbed.bed} and \texttt{AABBbed.bed}) are included in the \texttt{extdata} folder of the LynchSmithEldridgeTavareFragDup package.
+
+\begin{figure}[tbh]
+\begin{center}
+\includegraphics[width=\textwidth]{SS6003314.pdf}
+\end{center}
+\caption{A plot of minor allele fraction against sequencing depth reveals regions of consistent copy number.}
+\label{Tumourexample}
+\end{figure}
+
+We load in Picard data for the entire library (duplicate rate: $5.2\%$), and for two sets of regions: i) The regions that are classified as AB (after removing masked regions - duplicate rate: $3.7\%$), and ii) The regions that are classified as AABB (after removing masked regions - duplicate rate: $3.8\%$). Note that this is a low duplication rate compared to those observed in libraries from normal tissue/blood. We attribute the change going from the entire library to the subsets as being due to the removal of masked regions; the AABB regions alone represent more than half of the sequencing library. We expect there to be a higher duplication rate in the AABB regions than in the AB region because of fragmentation duplicates. That it is such a small change suggests that the fragmentation duplicate rate will be small in this case.
+
+<<LoadTumourPicardData,eval=TRUE>>=
+TumourPicard<-read.csv(file.path(EDpath,"Tumour","Picard.csv"),as.is=T)
+TumourPicard
+# and the duplicate rates
+round((TumourPicard[,6]-TumourPicard[,7])/(TumourPicard[,3]-TumourPicard[,7]),3)
+@
+
+\subsection{The SNPs}
+
+Tumour samples require bespoke lists, so we restrict ourselves to sites that we know to be heterozygous. We can define two sets of heterozygous SNPs for the AB ($985$ SNPs), and AABB (a sample of $10,000$ SNPs)  regions. 
+
+<<TumourSNPlists,eval=TRUE>>=
+snplistAABB<-read.delim(file.path(EDpath,"Tumour","usedupAABB.txt"),as.is=T,header=F)
+snplistAB<-read.delim(file.path(EDpath,"Tumour","usedupAB.txt"),as.is=T,header=F)
+@
+
+
+\subsection{Counting the duplicates}
+
+As before, we are unable to distribute the raw data, which are archived in the European Genome Archive [\href{https://www.ebi.ac.uk/ega/datasets/EGAD00001000704}{EGA:EGAD00001000704}]. The following code will generate the summary table in the manner we have come to expect.
+
+<<ProcessTumourBam,eval=FALSE>>=
+
+HetSNPTableAABB<-processBAMfordups("SS6003314.bam",path,snplistAABB,poscol=2)
+HetSNPTableAB<-processBAMfordups("SS6003314.bam",path,snplistAB,poscol=2)
+write.table(HetSNPTableAABB,file="HetSNPTableTumourAABB.txt",sep="\t")
+write.table(HetSNPTableAB,file="HetSNPTableTumourAB.txt",sep="\t")
+@
+
+Assuming that the user hasn't obtained the raw data, we now load in the precompiled summary table. Note that although we have pre-specified sites that are heterozygous, the filters in processBAMfordups have reduced the numbers to 8396 and 759.
+
+<<LoadSNPsummaryTumour,eval=TRUE>>=
+#HetSNPTableAABB<-read.delim(file.path(EDpath,"Tumour","HetSNPTableTumourAABB.txt"),as.is=T,header=T)
+#HetSNPTableAB<-read.delim(file.path(EDpath,"Tumour","HetSNPTableTumourAB.txt"),as.is=T,header=T)
+HetSNPTableAABB<-read.delim(file.path(EDpath,"HetSNPTableTumourAABB.tsv"),as.is=T,header=T)
+HetSNPTableAB<-read.delim(file.path(EDpath,"HetSNPTableTumourAB.tsv"),as.is=T,header=T)
+HetSNPTableTumour<-rbind(HetSNPTableAABB,HetSNPTableAB)
+rownames(HetSNPTableTumour)<-c("AABB","AB")
+rm(HetSNPTableAB,HetSNPTableAABB)
+@
+
+\subsection{Estimating the fragmentation duplicate proportion}
+
+Processing this in the same manner as previous allele pattern counts...
+
+<<ProcessTumourPatterns,eval=TRUE>>=
+tumourresults<-processduptable(HetSNPTableTumour,PL,CL)
+@
+
+...we see that the fragmentation duplicate rate is higher in the AABB region than the AB region.
+
+<<TumourFradDup,eval=TRUE>>=
+tumourresults
+@
+
+
+
+
+The difference between the two estimates has close to halved. Given the noise inherrent in the estimate from the smaller AB region, the corrected estimates from the AABB and AB regions are remarkably consistent.
+
+\subsection{Extending to regions that are not in allelic balance}
+
+We have demonstrated the approach only in genomic regions of allelic balance, but in theory this could be extended to any region where both alleles are present in the library (which due to contamination from normal cells, will still allow for regions that exhibit loss of heterozygosity in the tumour). 
+
+The added complication comes in the form of $\Pr(AP_k \mid \text{PART}_i)$ (see section \ref{subsec:Case2}). Consider the case where we have two duplicate reads from the partition into two different molecules. Without loss of generailty let the alleles at the SNP of interest be C and T. Currently we only consider two possible allele patterns \texttt{AA} representing the posibilities CC and TT and \texttt{AB} representing CT and TC. Since the probability of each allele is $\frac{1}{2}$ we say that the probability of the \texttt{AA} pattern is also $\frac{1}{2} = 0.5^2 + 0.5^2$. 
+
+Now if the allelic proportions are in fact $0.25$ and $0.75$, then we have two options:
+
+\begin{itemize}
+
+\item We still consider only two allele patterns, but the probability of the AA pattern is now $0.25^2 + 0.75^2 = 0.625$
+
+\item We can confidently associate probabilities with specific alleles (e.g through phasing we may be confident that it is the C allele present in $75\%$ of molecules) in which case we would now consider three allele patterns \texttt{CC}, \texttt{CT}, \texttt{TT} with probabilities $0.5625$, $0.375$ and $0.0625$ respectively.
+
+\end{itemize}
+
+The second option is more powerful than the first, but would require a not insubstantial effort to ensure that the probabilities are matched to SNPs correctly. In both cases, since fragmentation duplicates are more inclined to share the same allele than when we have allelic balance, the analysis will be less powerful than when we have allelic balance. In studies of human tumours we have thus far always been able to identify regions of the genome in allelic balance, but we acknowledge that there is the potential need to go down this route of studying regions of allelic imbalance, and that indeed it may be a prerequisite for application of these methods to other organisms.
+
+Note that for any sizeable segment of genome in the same state, we can empirically estimate the allelic fraction with enough precision that our methods will be useful, and so this does not cause problems.
+

@@ -1,0 +1,94 @@
+% !Rnw root = duplicatessweave.Rnw
+
+\subsection{Choosing the SNPs}
+
+We investigate $2,500$ common SNPs in anticipation of identifying $1,000$ heterozygous sites for each sample. In this manner we avoid the burden of having to define a bespoke set of sites for each case.
+
+The SNPs were selected from UCSC's snp138Common table, considering only those validated by the $1000$ Genomes Project. We required the reported population minor allele frequency (MAF) of selected SNPs be $>0.49$ based on $>2,500$ observations and that the SNPs were located on one of the $24$ `regular' chromosomes. The $2,500$  SNPs were selected at random from all those meeting the criteria. 
+
+Despite these criteria, the true MAF can only be biased in one direction from the approximately $0.5$ we nominally required, and our sequencing depth and requirements for calling heterozygous SNPs in the data mean that we will fail to identify up to ten percent of heterozygous sites because, by chance, their observed allele frequencies will be too extreme. Additionally, $35$ of the randomly selected SNPs were from the sex chromosomes, and are `unlikely' to be heterozygous in our predominantly male patients. In combination, these effects mean that we can anticipate approximately $1,000$ of the SNPs to be heterozygous in each patient.
+
+By choosing a set of SNPs with high MAF, we can guarantee a good number of heterozygous observations in each sample, without the computational burden of defining a bespoke set of sites for each case. Extracting all reads mapping to these locations creates a BAM file that is approximately $10,000$ times smaller than the original and so allows for easy manipulation of large cohorts. We note that such a set of SNPs, and the BAM file they produce, are also useful for activities such as i) detecting sample contamination, ii) detecting sample mix ups, iii) detecting familial/ancestral relationships, and so have utility beyond our purposes in this study.
+
+We now load in the set of SNPs and explore them.
+
+<<LoadSNPlist, eval=TRUE>>=
+snplist<-read.delim(file.path(EDpath,"SNPstoextract.txt"),as.is=T,header=T)
+@
+
+
+\subsection{Representativeness of the SNPs}
+
+\subsubsection{Distribution across Chromosomes}
+We can see (Figure~\ref{duplicatessweave-AddFig1}) that the SNPs are chosen from all chromosomes (Figure \ref{duplicatessweave-AddFig1}), and that we are not far from having numbers proportional to chromosome length.
+
+<<AddFig1, fig=TRUE, include=FALSE, width=6, height=4,eval=TRUE>>=
+par(mar=c(4.6,4.1,1.6,1.6))
+plot(table(snplist$chrom)[c(1,12,16:22,2:11,13:15,23:24)], 
+     ylab="number of SNPs",xlab="chromosome",axes=F)
+axis(2)
+axis(1,labels=c(1:22,"X","Y"),at=1:24,las=2)
+box()
+@
+
+\incfig[h]{duplicatessweave-AddFig1}{\textwidth}{SNP numbers.}
+{The numbers of SNPs used from each chromosome.}
+
+\subsubsection{GC content}
+
+We take the locations of the $2,500$ SNPs in our list and place a window of $500$ bases around them, before counting the number of G and C bases in that window.
+
+<<SNPGCbias,eval=TRUE>>=
+genome <- Hsapiens
+GCNo<-rep(NA,2500)
+for(i in 1:2500){
+  GCNo[i]<-sum(unlist(strsplit(as.character(substr(genome[[snplist$chrom[i]]],snplist$chromEnd[i]-250,snplist$chromEnd[i]+249)),"")) %in% c("G","C"))
+}
+@
+
+For comparison, we take the human genome (chromosomes 1-22 and X), divide it up into bins of $500$ and calculate the proportion of bases that are G or C in each bin.
+
+
+<<GCrefgenome,eval=TRUE>>=
+GCbinned<-NULL
+for(k in 1:23){
+    windowViews <- trim(Views(genome[[k]], start = seq(1, length(genome[[k]]), 500), width = 500))
+    letterFreq <- letterFrequency(windowViews, letters = c("A","C","G","T"))
+    seqGC <- rowSums(letterFreq[,2:3]) / rowSums(letterFreq)
+    GCbinned<-c(GCbinned,seqGC)
+}
+@
+
+We see (Figure~\ref{duplicatessweave-AddFigSNPGC}) that the distribution of GC in our selection is a good representation of the GC content of the genome (with departure only in the final percentile).
+
+
+<<AddFigSNPGC, fig=TRUE, include=FALSE, width=10, height=5,eval=TRUE>>=
+par(mfrow=c(1,2))
+hist(GCbinned,freq=F,col=rgb(1,0.5,0.5,0.5),breaks=seq(0,1,0.02),main="Distribution of GC content of genome",xlab="GC proportion")
+hist(GCNo/500,freq=F,col=rgb(0.5,0.5,1,0.5),breaks=seq(0,1,0.02),add=T)
+legend("topright",fill=c(rgb(1,0.5,0.5,0.5),rgb(0.5,0.5,1,0.5)),legend=c("Genome-wide","Our SNPs"))
+
+plot(quantile(GCbinned,probs=seq(0.01,.99,0.01),na.rm=T),quantile(GCNo/500,probs=seq(.01,.99,0.01),na.rm=T),
+     pch=20,col="red",xlab="Genome wide 1st - 99th percentiles",
+     ylab="Our SNPs 1st - 99th percentiles",
+     main="Proportion GC Content\nKolmogorov-Smirnov p=0.08")
+for(i in 1:99){
+  GW<-quantile(GCbinned,probs=i/100,na.rm=T)
+  OS<-quantile(GCNo/500,probs=i/100,na.rm=T)
+lines(c(GW,GW),c(0,OS),lwd=0.5)  
+lines(c(0,GW),c(OS,OS),lwd=0.5)  
+}
+points(quantile(GCbinned,probs=seq(0.01,.99,0.01),na.rm=T),quantile(GCNo/500,probs=seq(.01,.99,0.01),na.rm=T),pch=20,col="red")
+abline(0,1,lwd=2)
+@
+\incfig[h]{duplicatessweave-AddFigSNPGC}{\textwidth}{SNP GC representativeness.}
+{Illustrating that the distribution of GC in our selection is a good representation of the GC content of the genome.}
+
+Despite the power to detect deviation with this number of samples, the Kolmogorov-Smirnov test is not significant.
+
+<<KStest,eval=TRUE>>=
+ks.test(GCbinned,GCNo/500)
+@
+
+
+

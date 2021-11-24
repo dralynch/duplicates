@@ -1,0 +1,319 @@
+% !Rnw root = duplicatessweave.Rnw
+
+
+
+The manuscript that this package accompanies is concerned with separating the observed duplicate rate into a proportion due to PCR duplication of the same original molecule $P_D$, and the proportion due to identical fragmentation of two distinct molecules $F_D = 1-P_D$. To do this we make use of sites of heterogenous SNPs where we can (at least some of the time) distinguish the two scenarios.
+
+\subsection{Case 1: A pair of duplicate fragments}
+
+Recall that if we have only observe duplicate fragments in pairs then, if we observe counts of $N_{AA}$ fragment pairs reporting the same nucleotide, and $N_{AB}$ reporting different nucleotides, the estimate of $P_D$ is
+\begin{equation} \label{eq:M2}
+P_D = 1- 2 \times N_{AB}/N.
+\end{equation} 
+
+\subsection{Case 2: More than two duplicate fragments}
+\label{subsec:Case2}
+
+Recall that in this case we estimate $P_D$ by maximizing the total log-likelihood 
+\begin{equation}
+l(P_D) = \sum_{M} l_M(P_D) .
+\end{equation}
+\noindent where
+\begin{equation}
+l_M(P_D) = \sum_{k=1}^{Q_M} N(AP_k) \log\Pr(AP_k \mid P_D),
+\end{equation}
+\noindent and
+\begin{equation}
+\Pr(AP_k \mid P_D) = \sum_{i}\Pr(AP_k \mid \text{PART}_i)\Pr(\text{PART}_i \mid P_D).
+\end{equation}
+
+In these equations, $M$ is the size of our set of duplicate fragments, $\text{PART}_i$ is the $i^{th}$ potential partition of the duplicate fragments into the original molecules, $AP_k$ is the $k^{th}$ observable allele pattern, and $N(AP_k)$ is the number of times that the allele pattern has been observed.
+
+A worked example for M=4 is given in the main manuscript. An example for M=5 appears in Figure \ref{M5example}.
+
+\begin{figure*}[hp!]
+\begin{center}
+\includegraphics[width=\textwidth]{M5figureexample.pdf}
+\end{center}
+\caption{Worked example calculation of $\Pr(AP_k \mid P_D)$ for $M = 5$. There are seven identifiably distinct partitions of fragments into molecules. In panel A we have four PCR duplicates of a single fragment. In panel B there are two distinct duplicate fragments, one of which has three PCR duplicates, while panel C has two distinct duplicate fragments one of which has one PCR duplicate and one of which has two PCR duplicates. In panel D, there are three distinct duplicate fragments, one of which has two PCR duplicates and in panel E there are again three distinct fragments, two of which have a PCR duplicate. Panel F depicts the case where there are four distinct molecules, one of which has a PCR duplicate, and in panel G there are five distinct molecules with no PCR duplicates. The probabilities of the seven possible partitions $\Pr(\text{PART}_i \mid P_D)$ are shown, and for each partition the proportions in which the three possible observable allele patterns (AAAAA, AAAAB, AAABB) will arise are illustrated, allowing calculation of $\Pr(AP_k \mid P_D)$  For example $\Pr(\text{AAABB} \mid P_D) = P_D^3F_D + \frac{3}{4}P_D^2F_D^2
++ \frac{3}{2}P_D^2F_D^2 + 2P_DF_D^3 + \frac{10}{16}F_D^4$
+}
+\label{M5example}
+\end{figure*}
+
+The probabilities $\Pr(\text{PART}_i \mid P_D)$ are all of the form $aP_D^bF_D^c$ where $a$, $b$ and $c$ are to be determined. $b$ is clearly the number of PCR duplicates in the partition, and $c = M - b - 1$. 
+
+The calculation of $a$ is not as obvious. Given a partition of the $M$ fragments into $N$ molecules that provide $f_1$,$f_2$,...,$f_N$ fragments in turn ($f_i > 0 \forall i, \sum_i f_i = M$), we denote as $\nu_j$ the number of molecules contributing $j$ fragments $1 \leq j \leq M$. The value of $a$ is then calculated as $a = N!/\prod_j \left( \nu_j! \right) = \left( \sum_j  \nu_j \right)!/\prod_j \left( \nu_j! \right)$. 
+
+To give a concrete example: When there are four fragments ($M = 4$) partitioned amongst three molecules ($N=3$) such that $f_1 = 2$, $f_2 = 1$, and $f_3 = 1$, then  $\nu_1 = 2$  and $\nu_2 = 1$ ($\nu_j =0 \forall j>2$). The value of $a$ is then $3!/(2!1!)=3$.
+
+When M=2 the partition probabilities are not controversial, being $P_D$ if a PCR duplicate is present and $F_D$ if two molecules are present. These probabilities sum to 1 as required. In each case we can consider the addition of a third fragment (a PCR duplicate with probability $P_D$ or a fragmentation duplicate with probability $F_D$). If the new fragment is a PCR duplicate, then it may be a duplicate of any of the existing molecules with equal probability and so the probabilities are shared accordingly. The recursive calculation of these values up to $M=4$ is illustrated in Figure \ref{probderive}.
+
+
+
+
+\begin{figure*}[t]
+\begin{center}
+\includegraphics[width=\textwidth]{probderive.pdf}
+\end{center}
+\caption{Recursive calculation of partition probabilities}
+\label{probderive}
+\end{figure*}
+
+
+\subsection{Proof that $a = \left( \sum_j  \nu_j \right)!/\prod_j \left( \nu_j! \right)$}
+
+Given the recursive nature in which we have discussed the calculation of $a$, it is no surprise that the proof is by induction
+
+\subsubsection{The base case (M = 2)}
+
+If M = 2, we either have the left-hand case in Figure~\ref{probderive} where two fragments from the same starting molecule are observed (and so $\nu_2=1, \nu_j =0 \forall j s.t. j \neq 2$), or we have the right hand case where one fragment is observed from each of two original molecules (and so $\nu_1=2, \nu_j =0 \forall j s.t. j \neq 1$).
+
+In the first case, $a = 1!/1! = 1$ and in the second $a = 2!/2! = 1$ as required.
+
+
+\subsubsection{The assumption ($M = G-1, G>2$)}
+
+We assume that for all partitions where $M = G-1$, that the relationship 
+
+\begin{equation}
+a = \left( \sum_j  \nu_j \right)!/\prod_j \left( \nu_j! \right)
+\end{equation}
+
+\noindent holds.
+
+\subsubsection{The inductive step ($M = G$)}
+
+We assume that our partition of $G$ duplicates is represented by the vector $(\nu_1, \nu_2, \nu_3, ...)$. We view the set of $G$ duplicates as having arisen from our having at some point had a set of $G-1$ fragments and then sequencing one more. We must distinguish between the two cases: 1) where the new duplicate in the set is the first from a previously unseen molecule (only possible if $\nu_1>0$), and 2) where the new duplicate is a further PCR duplicate from a previously seen molecule.
+
+\paragraph{Case 1: A new molecule}
+
+If we have observed a new molecule with our Gth fragment then the previous set of $G-1$ duplicates must have been represented by the vector $(\nu_1-1, \nu_2, \nu_3, ...)$. Clearly this is only possible if $\nu_1>0$ and, since observing a new molecule in this situation will always result in our observed partition, the full coefficient is inherited from the previous set (there will of course be a factor of $F_D$ as well).
+
+Hence the contribution to $a$ from this case is 
+
+\begin{equation} \label{eq:case1}
+\frac{\mathbb{I}_{\nu_1>0} \left(\left( \sum_j  \nu_j \right)-1\right)! }
+{\left(\nu_1 - 1 \right)!\prod_{j>1} \left( \nu_j! \right)}
+\end{equation}
+
+\noindent where $\mathbb{I}$ is the indicator function
+
+\paragraph{Case 2: A PCR duplicate from a previously observed molecule}
+
+In this case, the previous set of $G-1$ duplicates must have been represented by the vector $( ..., \nu_{k-1} +1, \nu_k -1, ...)$ for some $k$ such that $\nu_k > 0$ and $k>1$. 
+
+The coefficient, $a'$, associated with that vector is  
+
+\begin{equation}
+a' = \frac{\mathbb{I}_{\nu_k > 0} \left(\sum_j  \nu_j \right)!}{\left(\nu_{k-1} + 1 \right)! \left(\nu_k - 1 \right)!\prod_{j \notin k,(k-1)} \left( \nu_j! \right)}
+\end{equation}
+
+\noindent but a new PCR duplicate added to that set might create patterns other than the one in which we are interested, so only a portion of the coefficient makes a contribution to our estimate of $a$. It would only have led to our observed pattern if the PCR duplicate had been of a molecule of which there previously existed $k-1$ copies. The fraction of the coefficient, $a'$, that contributes to our value of $a$ (not withstanding a factor $P_D$) is therefore the proportion of molecules of which there were previously $k-1$ copies: $\left(\nu_{k-1}+1 \right)/\left( \sum_j  \nu_j \right)$.
+
+The additive contribution to $a$ for this value of $k$ is therefore
+
+\begin{equation}
+\frac{\left(\nu_{k-1}+1 \right)}{ \sum_j  \nu_j }
+\frac{\mathbb{I}_{\nu_k > 0} \left( \sum_j  \nu_j \right)!}
+{\left(\nu_{k-1} + 1 \right)! \left(\nu_k - 1 \right)!
+\prod_{j \notin k,(k-1)} \left( \nu_j! \right)}
+\end{equation}
+
+and in total the contributions from this second case are
+
+\begin{equation} \label{eq:case2}
+\sum_{k>1}\left(
+\frac{\left(\nu_{k-1}+1 \right)}
+{ \sum_j  \nu_j }
+\frac{\mathbb{I}_{\nu_k > 0} \left( \sum_j  \nu_j \right)!}
+{\left(\nu_{k-1} + 1 \right)! \left(\nu_k - 1 \right)!
+\prod_{j \notin k,(k-1)} \left( \nu_j! \right)}
+\right)
+\end{equation}
+
+
+\paragraph{Combining the two cases.}
+
+If we combine the terms from the two cases as represented by expressions \ref{eq:case1} and \ref{eq:case2} then we get
+
+\begin{equation} 
+a = \frac{\mathbb{I}_{\nu_1>0} \left(\left( \sum_j  \nu_j \right)-1\right)! }
+{\left(\nu_1 - 1 \right)!\prod_{j>1} \left( \nu_j! \right)}
++ \sum_{k>1}\left(
+\frac{\left(\nu_{k-1}+1 \right)}
+{ \sum_j  \nu_j }
+\frac{\mathbb{I}_{\nu_k > 0} \left( \sum_j  \nu_j \right)!}
+{\left(\nu_{k-1} + 1 \right)! \left(\nu_k - 1 \right)!
+\prod_{j \notin k,(k-1)} \left( \nu_j! \right)}
+\right)
+\end{equation}
+
+\noindent which we can simplify by removing the terms in the first fraction on the right hand side 
+
+\begin{equation} 
+a = \frac{\mathbb{I}_{\nu_1>0} \left(\left( \sum_j  \nu_j \right)-1\right)! }
+{\left(\nu_1 - 1 \right)!\prod_{j>1} \left( \nu_j! \right)}
++ \sum_{k>1}\left(
+\frac{\mathbb{I}_{\nu_k > 0} \left(\left( \sum_j  \nu_j \right)-1\right)!}
+{\left(\nu_{k-1} \right)! \left(\nu_k - 1 \right)!
+\prod_{j \notin k,(k-1)} \left( \nu_j! \right)}
+\right)
+\end{equation}
+
+\noindent and can be tidied to
+
+\begin{equation} 
+a = \frac{\mathbb{I}_{\nu_1>0} \left(\left( \sum_j  \nu_j \right)-1\right)! }
+{\left(\nu_1 - 1 \right)!\prod_{j>1} \left( \nu_j! \right)}
++ \sum_{k>1}\left(
+\frac{\mathbb{I}_{\nu_k > 0} \left(\left( \sum_j  \nu_j \right)-1\right)!}
+{ \left(\nu_k - 1 \right)!
+\prod_{j \neq k} \left( \nu_j! \right)}
+\right)
+\end{equation}
+
+\noindent adjusting the products to be independent of $1$ and $k$
+
+\begin{equation} 
+a = \frac{\mathbb{I}_{\nu_1>0} \left(\left( \sum_j  \nu_j \right)-1\right)! \; \nu_1!}
+{\left(\nu_1 - 1 \right)!\prod_{j} \left( \nu_j! \right)}
++ \sum_{k>1}\left(
+\frac{\mathbb{I}_{\nu_k > 0} \left(\left( \sum_j  \nu_j \right)-1\right)! \; \nu_k!}
+{ \left(\nu_k - 1 \right)!
+\prod_{j} \left( \nu_j! \right)}
+\right)
+\end{equation}
+
+\noindent tidying up the other terms
+
+\begin{equation} 
+a = \frac{\mathbb{I}_{\nu_1>0} \left(\left( \sum_j  \nu_j \right)-1\right)! \; \nu_1}
+{\prod_{j} \left( \nu_j! \right)}
++ \sum_{k>1}\left(
+\frac{\mathbb{I}_{\nu_k > 0} \left(\left( \sum_j  \nu_j \right)-1\right)! \; \nu_k}
+{ 
+\prod_{j} \left( \nu_j! \right)}
+\right)
+\end{equation}
+
+\noindent we can now combine everything into one sum over k
+
+\begin{equation} 
+a = \sum_{k}\left(
+\frac{\mathbb{I}_{\nu_k > 0} \left(\left( \sum_j  \nu_j \right)-1\right)! \; \nu_k}
+{ 
+\prod_{j} \left( \nu_j! \right)}
+\right)
+\end{equation}
+
+\noindent Moving the terms that are independent of k out of the sum
+
+\begin{equation} 
+a = \frac{\left(\left( \sum_j  \nu_j \right)-1\right)!}{\prod_{j} \left( \nu_j! \right)}\sum_{k}\left(
+\nu_k \mathbb{I}_{\nu_k > 0}
+\right)
+\end{equation}
+
+\noindent which equals
+
+\begin{equation} 
+a = \frac{\left(\left( \sum_j  \nu_j \right)-1\right)!}{\prod_{j} \left( \nu_j! \right)}\left( \sum_j  \nu_j \right)
+\end{equation}
+
+\noindent and so we get 
+
+\begin{equation} 
+a = \frac{\left( \sum_j  \nu_j \right)!}{\prod_{j} \left( \nu_j! \right)}
+\end{equation}
+
+\noindent which was to be shown. 
+
+\subsection{Confirming that the two approaches match when M equals 2}
+
+Since $M=2$, we only have two possible allele patterns, and we can write down $\Pr(AP_k | P_D)$ in a straightforward manner.
+\begin{align}
+P(AA \mid P_D) &= \frac{1}{2}(1+P_D)\\
+P(AB \mid P_D) &= \frac{1}{2}(1-P_D)
+\end{align}
+The log-likelihood is then
+\begin{equation}
+l(P_D) = n_{AA}\log(\frac{1}{2}(1+P_D))+n_{AB}\log(\frac{1}{2}(1-P_D)),
+\end{equation}
+\noindent and the first derivative is
+\begin{equation}
+\frac{dl}{dP_D} = \frac{n_{AA}}{(1+P_D)}+\frac{n_{AB}}{(1-P_D)}.
+\end{equation}
+If we look to find the MLE of $P_D$,
+\begin{equation}
+0 = n_{AA}(1-\hat{P}_D)+n_{AB}(1+\hat{P}_D),
+\end{equation}
+\noindent then we find it is equal to
+\begin{equation}
+\hat{P}_D = \frac{n_{AA}+n_{AB}}{N} = 1 - \frac{2n_{AB}}{N}
+\end{equation}
+\noindent as required to match equation \ref{eq:M2}.
+
+
+
+\subsection{The estimate is (in some sense) well-behaved when M equals 3}
+
+ The case when $M=3$ is depicted in Figure \ref{M3example}. In this simple case, there are only two patterns of alleles that can be observed: `AAA' and `AAB'.
+
+\begin{figure*}[tbh]
+\begin{center}
+\includegraphics[width=\textwidth]{SuppFigM3.pdf}
+\end{center}
+\caption{Details of the case when $M=3$.
+}
+\label{M3example}
+\end{figure*}
+
+
+The log-likelihood is then given as
+\begin{equation}
+l_3(P_D) = n_{AAA} \log(P(AAA \mid P_D)) + n_{AAB} \log(P(AAB \mid P_D)). 
+\end{equation}
+\noindent Since this is of the form 
+\begin{equation}
+l = n \log f(P_D) + m \log (1-f(P_D)),
+\end{equation}
+\noindent we can see that the first derivative is of the form 
+\begin{equation}
+n f'(P_D) - (n+m)f'(P_D)f(P_D)
+\end{equation}
+\noindent So, 
+\begin{equation}
+\begin{split}
+\frac{dl}{dP_D}=&n_{AAA}(\frac{1}{2}P_D+\frac{1}{2}) - \\&(n_{AAA}+n_{AAB})(\frac{1}{2}P_D+\frac{1}{2})(\frac{1}{4}P_D^2+\frac{1}{2}P_D+\frac{1}{4})
+\end{split}
+\end{equation}
+\noindent and since $P_D$ cannot equal $-1$, we have 
+\begin{equation}
+0 = \hat{P}_D^2 + 2\hat{P}_D + 1 -\frac{4n_{AAA}}{n_{AAA}+n_{AAB}}
+\end{equation}
+\noindent and
+\begin{equation} \label{eq:M3}
+\hat{P}_D = -1 \pm 2\sqrt{\frac{n_{AAA}}{n_{AAA}+n_{AAB}}}
+\end{equation}
+
+From Figure \ref{M3example}, we can see that for a large numbers of trios, $N = n_{AAA} + n_{AAB}$, $n_{AAA}$ will be approximately equal to $N (\frac{1}{4}P_D^2+\frac{1}{2}P_D+\frac{1}{4})$, which if substituted into the equation for $\hat{P}_D$ gives the estimate $\hat{P}_D = P_D$.
+
+\subsection{Inconsistency with a naive approach when M=3}
+
+Were we to adopt a naive approach, we might simply deal with cases where $M > 2$ by discarding all but 2 fragments in the set at random.
+
+If $M=3$ we would expect to see 
+
+\begin{align}
+n_{AA} &= n_{AAA}+\frac{1}{3}n_{AAB}\\
+n_{AB} &= \frac{2}{3}n_{AAB}
+\end{align}
+
+and so the estimate of $P_D$ will be 
+
+\begin{equation}
+\hat{P}_D = 1 - \frac{4n_{AAB}}{3N}
+\end{equation}
+
+which in general will not equal the estimate obtained from using all of the data (equation \ref{eq:M3}).

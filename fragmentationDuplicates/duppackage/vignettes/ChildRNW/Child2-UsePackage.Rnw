@@ -1,0 +1,25 @@
+% !Rnw root = duplicatessweave.Rnw
+
+There are two primary functions provided to the user in this package. \Rfunction{processBAMfordups} takes an input BAM file and returns a table of allele patterns observed in sets of duplicate reads, while \Rfunction{processduptable} takes such a table and makes inference about the duplication rates.
+
+\subsection{\Rfunction{processBAMfordups}}
+
+This function takes as its arguments a list of BAM files to process, the path in which to find them, and a list of locations at which to look for heterozygous SNPs. The BAM files must be indexed and have had duplicate reads marked (by e.g. Picard). Other parameters specifying the format of the list of locations, and the criteria by which to accept a locus for use in the analysis can also be set.
+
+The usage is as follows:
+
+<<Child2-1, eval=FALSE>>=
+duptable<-processBAMfordups(bamfilelist,path,snplist)
+@
+
+The output is a table, the first three columns of which are set as 1) The number of loci deemed to be heterozygous SNPs and therefore of use, 2) the number of well-mapped reads covering those loci and, 3) the number of duplicates at those loci in which allele patterns could be examined.  Subsequent columns give counts for observed allele patterns (the pattern indicated by the column name), while the final column indicates the count of reads that had an inconsistent allele call at the relevant locus.
+
+\subsection{\Rfunction{processduptable}}
+
+The second key function takes the output of processBAMfordups and processes it to estimate the fraction of duplicates attributable to fragmentation.
+
+<<Child2-2, eval=FALSE>>=
+processduptable(duptable,partitionList,coefficientList)
+@
+
+This outputs a table with a) and estimate of the duplicate rate (but note there will probably be an estimate of this available to the user that is based on more data than are made use of here), b) the proportion of duplicates that are attributable to coincidental fragmentation, c) the resulting estimated PCR duplicate rate, and d) the resulting estimated fragmentation duplicate rate.

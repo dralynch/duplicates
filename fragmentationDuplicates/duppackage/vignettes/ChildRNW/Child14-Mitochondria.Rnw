@@ -1,0 +1,105 @@
+% !Rnw root = duplicatessweave.Rnw
+
+The mitochondrial DNA poses an interesting problem as while it may exhibit heteroplasmy, it lacks sites that are heterozygous with predictable allele fractions, but at the same time often has such high copy number that the coincedental fragmentation duplicates are a large problem.
+
+\subsection{Simulation}
+
+We begin by simulating mitochondrial reads to determine the extent of the problem. We investigate various copy numbers, and use our two extreme insert size distribtuions. We also simulate single end sequencing, by halving the length of the reads and allowing no variation in insert sizes.
+
+<<MTSim,eval=TRUE>>=
+set.seed(246810)
+NarrowMTres<-simMTreads(numcopies=100,realISD=ISDnarrow)
+NarrowMTres<-rbind(NarrowMTres,simMTreads(numcopies=200,realISD=ISDnarrow))
+NarrowMTres<-rbind(NarrowMTres,simMTreads(numcopies=300,realISD=ISDnarrow))
+NarrowMTres<-rbind(NarrowMTres,simMTreads(numcopies=400,realISD=ISDnarrow))
+NarrowMTres<-rbind(NarrowMTres,simMTreads(numcopies=500,realISD=ISDnarrow))
+NarrowMTres<-rbind(NarrowMTres,simMTreads(numcopies=600,realISD=ISDnarrow))
+NarrowMTres<-rbind(NarrowMTres,simMTreads(numcopies=700,realISD=ISDnarrow))
+NarrowMTres<-rbind(NarrowMTres,simMTreads(numcopies=800,realISD=ISDnarrow))
+NarrowMTres<-rbind(NarrowMTres,simMTreads(numcopies=900,realISD=ISDnarrow))
+NarrowMTres<-rbind(NarrowMTres,simMTreads(numcopies=1000,realISD=ISDnarrow))
+
+WideMTres<-simMTreads(numcopies=100,realISD=ISDwide)
+WideMTres<-rbind(WideMTres,simMTreads(numcopies=200,realISD=ISDwide))
+WideMTres<-rbind(WideMTres,simMTreads(numcopies=300,realISD=ISDwide))
+WideMTres<-rbind(WideMTres,simMTreads(numcopies=400,realISD=ISDwide))
+WideMTres<-rbind(WideMTres,simMTreads(numcopies=500,realISD=ISDwide))
+WideMTres<-rbind(WideMTres,simMTreads(numcopies=600,realISD=ISDwide))
+WideMTres<-rbind(WideMTres,simMTreads(numcopies=700,realISD=ISDwide))
+WideMTres<-rbind(WideMTres,simMTreads(numcopies=800,realISD=ISDwide))
+WideMTres<-rbind(WideMTres,simMTreads(numcopies=900,realISD=ISDwide))
+WideMTres<-rbind(WideMTres,simMTreads(numcopies=1000,realISD=ISDwide))
+
+SEMTres<-simMTreads(numcopies=100,ISmean=100,ISsd=0,readlength=50)
+SEMTres<-rbind(SEMTres,simMTreads(numcopies=200,ISmean=100,ISsd=0,readlength=50))
+SEMTres<-rbind(SEMTres,simMTreads(numcopies=300,ISmean=100,ISsd=0,readlength=50))
+SEMTres<-rbind(SEMTres,simMTreads(numcopies=400,ISmean=100,ISsd=0,readlength=50))
+SEMTres<-rbind(SEMTres,simMTreads(numcopies=500,ISmean=100,ISsd=0,readlength=50))
+SEMTres<-rbind(SEMTres,simMTreads(numcopies=600,ISmean=100,ISsd=0,readlength=50))
+SEMTres<-rbind(SEMTres,simMTreads(numcopies=700,ISmean=100,ISsd=0,readlength=50))
+SEMTres<-rbind(SEMTres,simMTreads(numcopies=800,ISmean=100,ISsd=0,readlength=50))
+SEMTres<-rbind(SEMTres,simMTreads(numcopies=900,ISmean=100,ISsd=0,readlength=50))
+SEMTres<-rbind(SEMTres,simMTreads(numcopies=1000,ISmean=100,ISsd=0,readlength=50))
+@
+
+
+In Figure~\ref{duplicatessweave-MTDNA} we see that with a tight insert size distribution more than half of the reads can be marked as duplicates despite not being PCR duplicates. Moreover, comparing copy numbers between samples is hampered by the saturation effect that compresses the dynamic range, and particularly by differences between the insert size distributions, if one adopts the common practise of removing all `duplicates'.
+
+
+\subsection{Picard}
+
+We revisit the Picard output from the mitochondrial mask discussed in the ``Sample Information'' section. In doing so we will create an object entitled \texttt{PicardMito} as described below.
+
+<<Mito1,eval=TRUE>>=  
+lf<-read.delim(file.path(EDpath,"Picard",metfiles[3]),as.is=T)
+lf<-lf[-(15:19),]
+@
+
+The Picard duplicate rate is inflated by up to 3\% by the inclusion of`unpaired' reads in its calculation (these are virtually all marked as duplicates in the high-copy context of the mtDNA). However it indicates that on average a third of reads (and up to two-thirds of reads) are marked as duplicates, and since we have a good estimate of the true PCR duplicate rate we can see that the apparent rate in the mitochondria inflates this by a factor of up to $36\times$
+
+<<Mito2,eval=TRUE>>=
+summary(lf[,8])
+summary(100*lf[,8]/FDres[,3])
+@
+
+We now tabulate the depth of sequencing with and without removing duplicates, and also with our correction for the PCR duplicate rate
+
+<<Mito3,eval=TRUE>>=
+MitoDepths<-cbind(lf[,3]*200+lf[,2]*100,lf[,3]*200+lf[,2]*100-lf[,6]*200-lf[,5]*100,(lf[,3]*200+lf[,2]*100)*(100-FDres[,3])/100)/16569
+
+MitoCNs<-MitoDepths/(ResDepth*(100-FDres[,3])/200)
+
+@
+
+Now we produce Figure 3 from the paper (Figure \ref{duplicatessweave-AddFig3} in this document), combining complexity and mitochondrial copy number results.
+
+<<MTDNA, fig=TRUE, include=FALSE, width=8, height=6,eval=TRUE>>=
+par(mfrow=c(1,2))
+plot(as.numeric(NarrowMTres[,8]),as.numeric(NarrowMTres[,9]),xlim=c(0,1000),ylim=c(0,1000),pch=16,type="b",xlab="True copy number",ylab="Inferred copy number",main="Simulations")
+points(as.numeric(WideMTres[,8]),as.numeric(WideMTres[,9]),col="red",pch=16,type="b")
+points(as.numeric(SEMTres[,8]),as.numeric(SEMTres[,9]),col="blue",pch=16,type="b")
+abline(0,1,lwd=2)
+legend("topleft",fill=c("red","black","blue"),legend=c("Wide ISD","Narrow ISD","Single end"))
+
+lines(c(-100,900),c(383,383),lty=3,col="black",lwd=2)
+lines(c(-100,500),c(397,397),lty=3,col="red",lwd=2)
+lines(c(900,900),c(-100,383),lty=3,col="black",lwd=2)
+lines(c(500,500),c(-100,397),lty=3,col="red",lwd=2)
+
+
+plot(c(1,3),c(60,800),type="n",ylab="MtDNA copy number",xlab="",axes=F,main="Our 22 Example Cases")
+axis(2)
+box()
+for(i in seq(0,800,200)){
+  rect(-1,i-100,5,i,border="grey95",col="grey95")
+}
+for(i in 1:22){
+  tcol<-"black"
+  if(WeaverSuppTable1[i,12]=="Blood"){tcol<-"red"}
+  lines(1:3,(as.numeric(MitoCNs[i,c(1,3,2)])),type="b",pch=16,col=tcol)
+}
+axis(1,at=1:3,labels=c("No\nduplicates\nremoved","Corrected\nestimate","All\nduplicates\nremoved"),las=3)
+@
+\incfig[htbp!]{duplicatessweave-MTDNA}{\textwidth}{mtDNA copy number results}{Text text text}
+
+

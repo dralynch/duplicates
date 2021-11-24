@@ -1,0 +1,20 @@
+% latex table generated in R 3.2.3 by xtable 1.8-2 package
+% Tue Mar 29 21:22:37 2016
+\begin{table}[ht]
+\centering
+\begin{tabular}{rllll}
+  \hline
+ & Female Tissue & Female Blood & Male Tissue & Male Blood \\ 
+  \hline
+Residual & 6.82 & 3.48 & 7.8 & 4.43 \\ 
+  X & 1.23 & 1.43 & 1.09 & 1.2 \\ 
+  Y & - & - & 4.6 & 9.19 \\ 
+  M & 7.41 & 14.62 & 5.62 & 5.05 \\ 
+  Centromeres & 4.45 & 8.46 & 3.88 & 7.37 \\ 
+  Telomeres & 0.99 & 1.19 & 0.98 & 1.09 \\ 
+  Low Cov & 0.94 & 0.95 & 0.93 & 0.94 \\ 
+  High Cov & 1.6 & 2.76 & 1.44 & 2.45 \\ 
+   \hline
+\end{tabular}
+\end{table}
+

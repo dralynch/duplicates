@@ -1,0 +1,64 @@
+% !Rnw root = duplicatessweave.Rnw
+
+\subsection{Agreement of estimate from M equal to 2, with estimate from M greater than 2}
+
+We can separate out the estimate when $M=2$ from that when $M>2$. First of all we calculate the estimates only from the $M=2$ data.
+
+<<WhenMis2, eval=TRUE>>=
+HetSNPTableM2<-HetSNPTable
+HetSNPTableM2[,6:21]<-0
+
+FDvec2<-processduptable(HetSNPTableM2,PL,CL)
+
+@
+
+and then from the $M>2$ data.
+
+<<WhenMisnot2, eval=TRUE>>=
+
+HetSNPTableM3<-HetSNPTable
+HetSNPTableM3[,4:5]<-0
+
+FDvec3<-processduptable(HetSNPTableM3,PL,CL)
+
+@
+
+
+If we do this, we see that while there is some noise (to be expected as we have seen that there is a 19:1 ratio in terms of the numbers of fragment sets from which we draw our estimates) there is no evidence of bias (Figure \ref{duplicatessweave-ConcFig}).
+
+<<ConcFig, fig=TRUE, include=FALSE, width=5, height=5,eval=TRUE>>=
+plot(FDvec2[,2],FDvec3[,2],xlab="estimates from sets of 2 duplicate fragments",
+     ylab="estimates from sets of >2 duplicate fragments")
+abline(0,1)
+@
+
+\incfig[!h]{duplicatessweave-ConcFig}{0.7\textwidth}{Consistency of estimates from sets of 2 fragments and sets of more than 2 fragments.}
+
+
+\subsection{Agreement of estimate from High-GC SNPs, and Low-GC SNPs}
+
+We observe a median of $199 / 500$ Gs and Cs in our $2500$ SNP regions and so divide up the SNPs into two sets: i) the $1242$ SNP regions with GC content less than $199 / 500$, and ii) the $1258$ SNP regions with GC content of $199 / 500$ or greater. We first load in the summary tables of SNP pattern counts.
+
+<<LoadSNPsummary1,eval=TRUE>>=
+HetSNPTableHighGC<-read.delim(file.path(EDpath,"HetSNPDupsHighGC.txt"),as.is=T)
+HetSNPTableLowGC<-read.delim(file.path(EDpath,"HetSNPDupsLowGC.txt"),as.is=T)
+@
+
+We now process both tables using the methods developed for the main table. 
+
+
+<<GCComparison, eval=TRUE>>=
+FDvecHigh<-processduptable(HetSNPTableHighGC,PL,CL)
+FDvecLow<-processduptable(HetSNPTableLowGC,PL,CL)
+@
+
+We note that there is good agreement, and no evidence of bias, in the estimate of the proportion of fragmentation duplicates when we compare the high-GC and low-GC values.
+
+<<GCCompFig, fig=TRUE, include=FALSE, width=5, height=5,eval=TRUE>>=
+  plot(FDvecHigh[,2],FDvecLow[,2],xlab="estimates from duplicates in 'high GC' regions",
+       ylab="estimates from duplicates in 'low GC' regions")
+abline(0,1)
+@
+
+%\incfig[h]{duplicatessweave-GCCompFig}{\textwidth}{SNP numbers.}{The numbers of SNPs used from each chromosome.}
+\incfig[!h]{duplicatessweave-GCCompFig}{0.7\textwidth}{GC effect:}{Consistency of estimates from low and high GC regions.}

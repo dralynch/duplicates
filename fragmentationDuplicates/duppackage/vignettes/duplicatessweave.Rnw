@@ -1,0 +1,103 @@
+\documentclass{article}
+
+\usepackage{Sweave}
+\usepackage[utf8]{inputenc}
+\usepackage{color}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{color}
+<<style, eval=TRUE, echo=FALSE, results=tex>>=
+BiocStyle::latex()
+library("FragmentationDuplicates")
+@
+
+
+
+\title{`Fragmentation duplicates': Sweave}
+\author{Andy Lynch and Mike Smith}
+\begin{document}
+\SweaveOpts{concordance=TRUE,useFancyQuotes=FALSE}
+
+\maketitle
+\tableofcontents
+
+
+
+
+
+\clearpage{}
+
+\section{Introduction: The LynchSmithEldridgeTavareFragDup Package}
+\SweaveInput{ChildRNW/Child1-Introduction.Rnw}
+\clearpage{}
+
+\section{General use of the package}
+\SweaveInput{ChildRNW/Child2-UsePackage.Rnw}
+\clearpage{}
+
+\section{Methods}
+\SweaveInput{ChildRNW/Child3-Methods.Rnw}
+\clearpage{}
+
+\section{Simulation}
+\SweaveInput{ChildRNW/Child4-Simulations.Rnw}
+\clearpage{}
+
+\section{SNPs to extract}
+\label{sec:SNPs}
+\SweaveInput{ChildRNW/Child5-SNPchoice.Rnw}
+\clearpage{}
+
+
+\section{Sample information}
+\label{sec:SampInfo}
+\SweaveInput{ChildRNW/Child6-Samples.Rnw}
+\clearpage{}
+
+\section{SNP numbers in our samples}
+\SweaveInput{ChildRNW/Child7-SNPnumbers.Rnw}
+\clearpage{}
+
+\section{Duplicate rate estimates}
+\label{sec:Estimates}
+\SweaveInput{ChildRNW/Child8-DuplicateRates.Rnw}
+\clearpage{}
+
+\section{Observations on consistency}
+\SweaveInput{ChildRNW/Child9-Consistency.Rnw}
+\clearpage{}
+
+\section{Processing Single End sequencing}
+\SweaveInput{ChildRNW/Child11-SingleEnd.Rnw}
+\clearpage{}
+
+
+\section{Processing a Tumour sample}
+\label{sec:Tumour}
+\SweaveInput{ChildRNW/Child12-Tumour.Rnw}
+\clearpage{}
+
+
+\section{Complexity estimates}
+\SweaveInput{ChildRNW/Child13-Complexity.Rnw}
+\clearpage{}
+
+
+\section{Adding additional lanes of sequencing}
+\SweaveInput{ChildRNW/Child10-ByLane.Rnw}
+\clearpage{}
+
+
+\section{Mitochondria}
+\SweaveInput{ChildRNW/Child14-Mitochondria.Rnw}
+\clearpage{}
+
+\section{Session Info}
+
+For updates to this package/document, please visit www.compbio.group.cam.ac.uk.
+
+<<Session Info,results=tex, print=TRUE>>=
+toLatex(sessionInfo())
+@
+
+\end{document}

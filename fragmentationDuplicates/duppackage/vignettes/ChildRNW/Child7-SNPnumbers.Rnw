@@ -1,0 +1,102 @@
+% !Rnw root = duplicatessweave.Rnw
+
+\subsection{Processing the SNPs}
+
+The following code will not be evaluated, as the patients' data are not distributed with this sweave, but can be obtained from the European Genome Archive (as previously noted). The summary data which are distributed are loaded in after this section, but the code here shows how they were created.
+
+Later, we are going to contrast the estimate obtained from SNPs in high-GC regions with that from those in low-GC regions. We prepare for this analysis now also.
+
+<<Het SNP processing1,eval=FALSE>>=
+HetSNPTable<-processBAMfordups(bamfilelist=bamfilelist,path=path,snplist=snplist)
+write.table(HetSNPTable,file="HetSNPDups.txt",sep="\t")
+
+HetSNPTableLowGC<-processBAMfordups(bamfilelist=bamfilelist,path=path,snplist=snplist[GCNo<199,])
+HetSNPTableHighGC<-processBAMfordups(bamfilelist=bamfilelist,path=path,snplist=snplist[GCNo>=199,])
+write.table(HetSNPTableHighGC,file="HetSNPDupsHighGC.txt",sep="\t") 
+write.table(HetSNPTableLowGC,file="HetSNPDupsLowGC.txt",sep="\t")
+@
+
+
+\subsection{Exploration of SNP numbers}
+\subsubsection{Preliminaries}
+
+We now load in the summary of the numbers of SNPs being investigated, and generate the various results given in the section "SNP numbers and duplicate numbers" in the main manuscript.
+
+<<LoadSNPsummary1,eval=TRUE>>=
+HetSNPTable<-read.delim(file.path(EDpath,"HetSNPDups.txt"),as.is=T)
+@
+
+We define the duplicate rate as the number of duplicates identified within the unmasked regions of the genome divided by the number of read-pairs examined within those regions.
+
+<<LoadSNPsummary2,eval=TRUE>>=
+ResDupR<-readPairDuplicates[,9]/readPairsExamined[,9]
+@
+
+We define the residual read depth as 200 (the number of bases sequenced per read-pair) multiplied by the number of read-pairs examined, divided by the length of the unmasked genome.
+
+<<LoadSNPsummary3,eval=TRUE>>=
+ResDepth<-round(200*readPairsExamined[,9]/effectiveGenomeSize[9],2)
+@
+
+\subsubsection{How many SNPs do we see?}
+
+``From the 2,500 sites considered, the median number of heterozygous SNPs identified per sample is 1,009 (range 942 to 1,093).''
+
+<<LoadSNPsummary3,eval=TRUE>>=
+summary(HetSNPTable[,1])
+@
+
+``Average read depth (as measured by the number of reads mapping to the regions of the genome that we are not masking) is correlated with the number of heterozygous SNPs (correlation = 0.52, p = 0.014): a reflection on our stringent calling criterion.''
+
+<<LoadSNPsummary4,eval=TRUE>>=
+summary(lm(HetSNPTable[,1]~ResDepth+ResDupR))
+cor.test(ResDepth,HetSNPTable[,1])
+@
+
+\subsubsection{How many duplicate read pairs are we using?}
+
+``The number of sets of duplicate read fragments observed to overlie the heterozygous SNP sites varies from $1,334$ to $9,513$.''
+
+<<LoadSNPsummary5,eval=TRUE>>=
+#summary(apply(HetSNPTable[,-1],1,sum))
+summary(HetSNPTable[,3])
+@
+``The number of duplicate sets is unsurprisingly dependent on the duplicate rate ($p < 2 x 10^{-16}$) and the depth of coverage ($p = 3.3 x 10^{-5}$), but not directly on the number of heterozygous sites being considered (although this is correlated with the depth of coverage).''
+
+<<LoadSNPsummary6,eval=TRUE>>=
+summary(lm(HetSNPTable[,3]~ResDupR+HetSNPTable[,1]+ResDepth))
+@
+
+\subsubsection{How do the duplicates read pairs break down into pairs, triples, etc.?}
+
+``Of the total of 82,903 sets of duplicate fragments identified among the 22 samples, ...''
+
+
+<<LoadSNPsummary7,eval=TRUE>>=
+sum(HetSNPTable[,3])
+@
+
+``...the vast majority (73,767 or 89\%) are duplicate pairs,''
+
+<<LoadSNPsummary8,eval=TRUE>>=
+sum(HetSNPTable[,4:5])
+round(100*sum(HetSNPTable[,4:5])/sum(HetSNPTable[,3]))
+@
+
+``...8,262 (10\%) are triples,...''
+<<LoadSNPsummary9,eval=TRUE>>=
+sum(2*HetSNPTable[,6:7])
+round(100*2*sum(HetSNPTable[,6:7])/sum(HetSNPTable[,3]))
+@
+
+``...771 (0.9\%) are quartets,...'' 
+<<LoadSNPsummary10,eval=TRUE>>=
+sum(3*HetSNPTable[,8:10])
+round(100*3*sum(HetSNPTable[,8:10])/sum(HetSNPTable[,3]))
+@
+
+``and the greatest number of fragments seen in a duplicate set is six (one instance).''
+<<LoadSNPsummary11,eval=TRUE>>=
+sum(HetSNPTable[,14:17])
+@
+

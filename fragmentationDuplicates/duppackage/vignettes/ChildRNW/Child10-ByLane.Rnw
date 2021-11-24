@@ -1,0 +1,97 @@
+% !Rnw root = duplicatessweave.Rnw
+
+We now consider the effects of adding additional lanes of sequencing on estimates of complexity. First loading the Picard estimates, we see that the estimate of complexity increases with each lane.
+
+<<Bylane1, eval=TRUE>>=
+PicardLane<-read.delim(file.path(EDpath,"Picard", "SS6003301_lanes.metrics.txt"),as.is=T)
+PicardLane[,9]
+round(PicardLane[,9]/PicardLane[5,9],2)
+@
+
+We now apply our methods. As before, we are unable to distribute the raw data, which are archived in the European Genome Archive [\href{https://www.ebi.ac.uk/ega/datasets/EGAD00001000704}{EGA:EGAD00001000704}]. Upon obtaining the data, the following code would produce the required table.
+
+<<Bylane2, eval=FALSE>>=
+lanelist<-list(c("HSQ1004_100:1"),
+c("HSQ1004_100:1","HSQ1004_100:2"),
+c("HSQ1004_100:1","HSQ1004_100:2","HSQ1004_100:3"),
+c("HSQ1004_100:1","HSQ1004_100:2","HSQ1004_100:3","HSQ1004_100:4"),
+c("HSQ1004_100:1","HSQ1004_100:2","HSQ1004_100:3","HSQ1004_100:4","HSQ1004_97:8:"))
+HetSNPTableByLane<-processBAMbylane("SS6003301.bam",path,snplist,lanelist)
+
+write.table(HetSNPTableByLane,file="HetSNPDupsByLane.txt",sep="\t")
+@
+
+We now load and process the prepared table
+
+<<Bylane3, eval=TRUE>>=
+HetSNPTableByLane<-read.delim(file.path(EDpath,"HetSNPDupsByLane.txt"),as.is=T,header=T)
+EstimatesByLane<-processduptable(HetSNPTableByLane,PL,CL)
+@
+
+We generate a first order complexity estimate from which to begin our search.
+
+<<Bylane4, eval=TRUE>>=
+LaneCEME<-rep(0,5)
+for(i in 1:5){
+  R<-EstimatesByLane[i,1]/100
+  LaneCEME[i]<-(PicardLane[i,3]-PicardLane[i,7])/(2*R)
+}
+@
+
+Now we generate complexity estimates using the observed duplicate rate from our heterozygous SNPs. Note that a) as expected from the previous section, the estimates are substantially greater, and b) the estimates are still monotonic but with a suggestion that they might be converging more quickly.
+
+
+<<Bylane5, eval=TRUE>>=
+LaneCEobserved<-rep(0,5)
+for(i in 1:5){
+  R<-EstimatesByLane[i,1]/100
+  N<-(PicardLane[i,3]-PicardLane[i,7])
+  startX<-LaneCEME[i]
+  LaneCEobserved[i]<-optimize(libCompNewParam,R=R,N=N,interval=c(0,2*startX),maximum=F)$minimum
+}
+LaneCEobserved
+round(LaneCEobserved/LaneCEobserved[5],2)
+@
+
+Now we generate complexity estimates using the corrected duplicate rate.
+
+<<Bylane6, eval=TRUE>>=
+LaneCEcorrected<-rep(0,5)
+for(i in 1:5){
+  R<-EstimatesByLane[i,3]/100
+  N<-(PicardLane[i,3]-PicardLane[i,7])
+  startX<-LaneCEME[i]
+  LaneCEcorrected[i]<-optimize(libCompNewParam,R=R,N=N,interval=c(0,2*startX),maximum=F)$minimum
+}
+LaneCEcorrected
+round(LaneCEcorrected/LaneCEcorrected[5],2)
+@
+
+
+
+<<Bylane7, fig=TRUE, include=FALSE, width=8, height=5,eval=TRUE>>=
+par(mfrow=c(1,2))
+plot(c(1,3),c(3,35),type="n",ylab="Library complexity estimate (billions)",xlab="",axes=F)
+axis(2)
+box()
+for(i in seq(0,40,2)){
+  rect(-1,i-1,5,i,border="grey95",col="grey95")
+}
+for(i in 1:22){
+  tcol<-"black"
+  if(WeaverSuppTable1[i,12]=="Blood"){tcol<-"red"}
+  lines(1:3,c(CEPicard[i],CEobserved[i],CEcorrected[i])/(10^9),type="b",pch=16,col=tcol)
+}
+axis(1,at=1:3,labels=c("Picard",
+                       "SNP observed",
+                       "Corrected"),las=3)
+  
+
+plot(PicardLane[,9]/(10^9),pch=16,ylim=c(0,11),ylab="",xlab="Number of lanes",las=1,main="Complexity")
+points(LaneCEobserved/(10^9),pch=16,col="red")
+points(LaneCEcorrected/(10^9),pch=16,col="blue")
+legend("bottom",fill=c("black","red","blue"),legend=c("Picard","SNP\nobserved","SNP corrected"))
+@
+\incfig[!h]{duplicatessweave-Bylane7}{0.7\textwidth}{Consistency of estimates from sets of 2 fragments and sets of more than 2 fragments.}
+
+

@@ -1,0 +1,154 @@
+% !Rnw root = duplicatessweave.Rnw
+
+\subsection{Artificial data}
+
+We can demonstrate the performance of the method using four artificial data sets that implememnt some of the results just seen
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrrrrrrrr}
+  \hline
+ & NoSNPs & NoReads & NoDups & AA & AB & AAA & AAB & NoN \\ 
+  \hline
+Test1 & 1000.00 & 80000.00 & 4000.00 & 2700.00 & 300.00 & 0.00 & 0.00 & 0.00 \\ 
+  Test2 & 1000.00 & 80000.00 & 4000.00 & 3800.00 & 200.00 & 0.00 & 0.00 & 0.00 \\ 
+  Test3 & 1000.00 & 80000.00 & 4000.00 & 0.00 & 0.00 & 1728.00 & 147.00 & 0.00 \\ 
+  Test4 & 1000.00 & 80000.00 & 4000.00 & 1777.00 & 98.00 & 0.00 & 0.00 & 0.00 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+Test 1 is an $M=2$ case, engineered to have a fragmentation duplicate fraction of $2 \times 300/3000 = 0.2$. \\\\ Test 2 is an $M=2$ case engineered to have a fragmentation duplicate fraction of $2 \times 200/4000 = 0.1$. \\\\ Test 3 is an $M=3$ case engineered to have a fragmentation duplicate fraction of $1- 2 \times \sqrt \frac{1728}{1728+147} = 0.08$.\\\\ Test 4 is the same case using a naive down-sampling to $M=2$ (i.e. one third of AABs end up as AA, the rest as AB). Following the results of the previous section, we do not expect this to return the correct value.
+
+We now read in this table. Then, to prepare for the probability calculations, we  generate the list of sets of partitions possible with each value of $M$ (the number of fragments in a duplicate set). 
+
+<<Simprepare, eval=TRUE>>=
+HSTtest<-read.delim(paste(EDpath,"/HSTtest.tsv",sep="",collapse=""),header=T,as.is=T)
+PL<-genPL(10)
+CL<-genCoefs(PL)
+processduptable(HSTtest,PL,CL)
+@
+
+We see that after applying the \Rfunction{processduptable} to this artificial data set, the method produces the correct solution in each case.
+
+
+\subsection{Insert Size Distributions}
+To demonstrate that the approach works in a controlled scenario, we use data simulated from the following assumptions: 
+
+\begin{itemize}
+\item Read start sites are uniformly distributed along a genome
+\item Insert size distributions are sampled from real data independently of the start sites
+\item PCR duplicate numbers for each individual read are IID Poisson distributed
+\end{itemize}
+
+The size selection step is crucial to the chances of seeing a fragmentation duplicate. Comparing two extreme insert size distributions from our example data set, we can see that (in the absence of any dependence on starting position etc.) the probability of two fragments sampled from the library being the same length differs by a factor of approximately $2.7$ ($0.020$ vs $0.007$).
+
+
+<<ISDexplore, eval=TRUE>>=
+ISDnarrow<-read.delim(paste(EDpath,"/ISDs/SS6003110.insertsizedist.txt",sep="",collapse=""), as.is=T, header=F)
+ISDwide<-read.delim(paste(EDpath,"/ISDs/SS6003304.insertsizedist.txt",sep="",collapse=""), as.is=T, header=F)
+
+ISDnarrow<-ISDnarrow[-1000,]
+ISDwide<-ISDwide[-1000,]
+
+
+set.seed(31415927)
+table(sample(ISDnarrow[,1], 100000, prob=ISDnarrow[,2], replace=T) == sample(ISDnarrow[,1], 100000, prob=ISDnarrow[,2], replace=T))/100000
+table(sample(ISDwide[,1], 100000, prob=ISDwide[,2], replace=T) == sample(ISDwide[,1], 100000, prob=ISDwide[,2], replace=T))/100000
+@
+
+Details of the samples that give rise to these distributions are given in Section~\ref{sec:SampInfo}, but it should be noted that the starting tissues and consequently the nucleic acid preparation methods were different. Figure~\ref{duplicatessweave-ISDexplore} illustrates the difference in distributions.
+
+<<ISDexplore2, fig=TRUE, width=6, height=4, include=FALSE, eval=TRUE>>=
+plot(ISDnarrow[,1],ISDnarrow[,2]/sum(ISDnarrow[,2]),xlim=c(200,500),xlab="Insert size",ylab="Density",type="l",lwd=3)
+points(ISDwide[,1],ISDwide[,2]/sum(ISDwide[,2]),col="red",type="l",lwd=3)
+text(375,0.025,"SS6003110")
+text(400,0.01,"SS6003304",col="red")
+@
+
+\incfig[h!]{duplicatessweave-ISDexplore}{\textwidth}{ISDs.}{Examples of extreme insert size distributions.}
+
+If we simulate from these two distributions, we see the effect they have on the fragmentation duplicate proportion.
+
+<<Simulation0, eval=TRUE>>=
+set.seed(978342)
+HSTsim0<-simreads(depth=60,pcrdup=0.06,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=5)
+HSTsim0<-rbind(HSTsim0,simreads(depth=60,pcrdup=0.06,realISD=ISDwide,lowerlength=0,upperlength=1000,maxM=5))
+
+PDTsim0<-processduptable(HSTsim0,PL,CL)
+PDTsim0
+@
+
+We see that the proportion of fragmentation duplicates is substantially lower when using the wider insert size distribution. With the ratio of fragmentation driven duplicate rates also being approximately $2.7$.
+
+\subsection{Demonstration that the method works}
+
+We simulate 1000 heterozygous SNPs, spaced at kilobase intervals. {PCR} duplication rates increase approximately linearly with depth, so we set them accordingly. 
+
+<<Simulation1, eval=TRUE>>=
+set.seed(62536231)
+HSTsim<-simreads(genlength=1000000,depth=20,pcrdup=0.02,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=5)
+HSTsim<-rbind(HSTsim,simreads(genlength=1000000,depth=40,pcrdup=0.04,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=5))
+HSTsim<-rbind(HSTsim,simreads(genlength=1000000,depth=60,pcrdup=0.06,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=5))
+HSTsim<-rbind(HSTsim,simreads(genlength=1000000,depth=80,pcrdup=0.08,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=5))
+HSTsim<-rbind(HSTsim,simreads(genlength=1000000,depth=100,pcrdup=0.1,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=5))
+
+PDTsim<-processduptable(HSTsim,PL,CL)
+PDTsim
+@
+
+<<Demonstration, fig=TRUE, width=6, height=4, include=FALSE, eval=TRUE>>=
+plot(seq(20,100,20),PDTsim[,1]/seq(2,10,2),ylim=c(0.95,1.15),xlab="Simulated depth of sequencing",ylab="Estimate/True value",pch=16,main="Using 1000 heterozygous loci")
+abline(h=1,lwd=3)
+points(seq(20,100,20),PDTsim[,3]/seq(2,10,2),col="red",pch=16)
+legend("topright",fill=c("black","red"),legend=c("Observed","Corrected"))
+@
+
+\incfig[h!]{duplicatessweave-Demonstration}{\textwidth}{Performance by depth}{Using 1000 loci, the performance across a range of depths is plotted.}
+
+In figure~\ref{duplicatessweave-Demonstration}, we see that, while there is naturally some stochasticity at low depth (where only 440 duplicate reads are observed), the corrected rate is notably closer (and indeed close) to the true value.
+
+We won't run the following code, as it takes too long for the sweave, but the greater depth emphasizes the improvement even more.
+
+<<Simulation2, eval=FALSE>>=
+set.seed(3502349)
+HSTsim2<-simreads(depth=200,pcrdup=0.2,realISD=ISDnarrow,lowerlength=0,upperlength=1000)
+#     NoSNPs NoReads NoDups    AA  AB  AAA AAB AAAA AAAB AABB AAAAA AAAAB AAABB AAAAAA AAAAAB AAAABB AAABBB NoN
+#[1,]    999  198406  40725 30693 323 3925 174  410   23   18    33     2     2      1      1      0      0   0
+processduptable(HSTsim2,PL,CL)
+#     ObservedDupRate PropFragDups AdjustedDupRate FragDupRate
+#[1,]        20.52609        0.027        19.97189   0.5542045
+@
+
+\subsection{How many SNPs are required?}
+
+We look now at the effect of changing the number of SNPs being used, for what are otherwise a typical set of parameters. We see that there is some volatility (especially at low values of SNPs), but that even at 500 SNPs the approach is useful. The estimate of the proportion of fragmentation duplicates is quite stable by the time 1000 SNPs are used.
+
+<<Simulation3, eval=TRUE>>=
+set.seed(5417583)
+HSTsim3<-simreads(genlength=100000,depth=60,pcrdup=0.06,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=6)
+HSTsim3<-rbind(HSTsim3,simreads(genlength=200000,depth=60,pcrdup=0.06,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=6))
+HSTsim3<-rbind(HSTsim3,simreads(genlength=300000,depth=60,pcrdup=0.06,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=6))
+HSTsim3<-rbind(HSTsim3,simreads(genlength=400000,depth=60,pcrdup=0.06,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=6))
+HSTsim3<-rbind(HSTsim3,simreads(genlength=500000,depth=60,pcrdup=0.06,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=6))
+HSTsim3<-rbind(HSTsim3,simreads(genlength=750000,depth=60,pcrdup=0.06,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=6))
+HSTsim3<-rbind(HSTsim3,simreads(genlength=1000000,depth=60,pcrdup=0.06,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=6))
+HSTsim3<-rbind(HSTsim3,simreads(genlength=1500000,depth=60,pcrdup=0.06,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=6))
+HSTsim3<-rbind(HSTsim3,simreads(genlength=2000000,depth=60,pcrdup=0.06,realISD=ISDnarrow,lowerlength=0,upperlength=1000,maxM=6))
+
+PDTsim3<-processduptable(HSTsim3,PL,CL)
+PDTsim3
+@
+
+Plotting the performance of the method with differing numbers of SNPs we see that anything more than 500 heterozygous loci should suffice for a typical depth of sequencing (Figure~\ref{duplicatessweave-SNPnumberplot}).
+
+<<SNPnumberplot, fig=TRUE, width=6, height=4, include=FALSE, eval=TRUE>>=
+plot(HSTsim3[,1],PDTsim3[,1],ylim=c(5,7),,xlim=c(0,2000),pch=16,xlab="Number of Heterozygous SNPs used",ylab="Estimates (percentage)",main="True value = 6",type="b",lwd=2)
+points(HSTsim3[,1],PDTsim3[,3],pch=16,col="red",type="b",lwd=2)
+legend("topright",fill=c("black","red"),legend=c("Observed","Corrected"))
+abline(h=6,lwd=3)
+@
+
+\incfig[h!]{duplicatessweave-SNPnumberplot}{\textwidth}{SNP numbers}{We see that at this (typical) depth, the performance of the method becomes stable once 400 SNPs have been used.}
+
+The suggestion from the previous two sections is that approximately 1500 duplicate reads are required (whether arising through high depth or a high number of heterozygoius loci).

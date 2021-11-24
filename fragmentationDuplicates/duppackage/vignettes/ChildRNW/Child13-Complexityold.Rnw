@@ -1,0 +1,67 @@
+% !Rnw root = duplicatessweave.Rnw
+
+If the library complexity is $X$, the number of read-pairs sequenced is $N$, and the  duplicate rate is denoted by $R_D$, then our estimate of $X$ is obtained by solving
+\begin{equation}  \label{calcX}
+R_D = \frac{X}{N}\exp\left(-\frac{N}{X}\right)+1-\frac{X}{N}
+\end{equation}
+\noindent using numerical methods. 
+
+\subsection{Picard}
+
+Picard bases its estimate of complexity on a genome-wide estimate of duplicate rate that is adversely affected by fragmentation duplicates.
+
+<<GetPicardEstimates,eval=TRUE>>=
+CEPicard<-unmaskedP[,9]
+summary(CEPicard)
+@
+
+\subsection{Estimating complexity using a basic duplication rate estimate}
+
+We recalculate the complexity using the observed duplicate rate from the SNPs we interrogated. This corrects for the excessive influence of fragmentation duplicates in regions of high copy number/poor mappability, but not the general influence of fragmentation duplicates.
+
+To obtain a starting point for the search, we use the closed form estimate based on a Maclaurin expansion $X = N/(2R_D)$.
+
+<<GetCEME,eval=TRUE>>=
+CEME<-rep(22,0)
+for(i in 1:22){
+  R<-FDres[i,1]/100
+  CEME[i]<-(readPairsExamined[i,1]-OpticalPairDuplicates[i,1])/(2*R)
+}
+@
+ 
+Now we obtain our complexity estimates.
+
+<<GetCEbasic,eval=TRUE>>=  
+CEobserved<-rep(22,0)
+for(i in 1:22){
+  R<-FDres[i,1]/100
+  N<-readPairsExamined[i,1]-OpticalPairDuplicates[i,1]
+  startX<-CEME[i]
+  CEobserved[i]<-optimize(libCompNewParam,R=R,N=N,interval=c(0,2*startX),maximum=F)$minimum
+}
+summary(CEobserved)
+@
+
+
+In general the values are higher reflecting the lower duplicate rate estimate.
+
+\subsection{Estimating complexity using a corrected duplication rate estimate}
+
+This is the best estimate we can produce.
+
+<<GetCEresid,eval=TRUE>>=  
+CEcorrected<-rep(22,0)
+for(i in 1:22){
+  R<-FDres[i,3]/100
+  N<-readPairsExamined[i,1]-OpticalPairDuplicates[i,1]
+  startX<-CEME[i]
+  CEcorrected[i]<-optimize(libCompNewParam,R=R,N=N,interval=c(0,2*startX),maximum=F)$minimum
+}
+summary(CEcorrected)
+summary(CEcorrected/CEPicard)
+@
+
+
+
+In all cases the basic estimate is lower than our best estimate of the library complexity (with factors ranging from 1.21 to 2.87) 
+  

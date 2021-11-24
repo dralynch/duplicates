@@ -1,0 +1,64 @@
+% !Rnw root = duplicatessweave.Rnw
+
+<<Bylane1, eval=TRUE>>=
+PicardLane<-read.delim(file.path(EDpath,"Picard", "SS6003301_lanes.metrics.txt"),as.is=T)
+@
+
+<<Bylane2, eval=FALSE>>=
+lanelist<-list(c("HSQ1004_100:1"),
+c("HSQ1004_100:1","HSQ1004_100:2"),
+c("HSQ1004_100:1","HSQ1004_100:2","HSQ1004_100:3"),
+c("HSQ1004_100:1","HSQ1004_100:2","HSQ1004_100:3","HSQ1004_100:4"),
+c("HSQ1004_100:1","HSQ1004_100:2","HSQ1004_100:3","HSQ1004_100:4","HSQ1004_97:8:"))
+HetSNPTableByLane<-processBAMbylane("SS6003301.bam",path,snplist,lanelist)
+
+write.table(HetSNPTableByLane,file="HetSNPDupsByLane.txt",sep="\t")
+@
+
+
+<<Bylane3, eval=TRUE>>=
+HetSNPTableByLane<-read.delim(file.path(EDpath,"HetSNPDupsByLane.txt"),as.is=T,header=T)
+EstimatesByLane<-processduptable(HetSNPTableByLane,PL,CL)
+@
+
+<<Bylane4, eval=TRUE>>=
+LaneCEME<-rep(5,0)
+for(i in 1:5){
+  R<-EstimatesByLane[i,1]/100
+  LaneCEME[i]<-(PicardLane[i,3]-PicardLane[i,7])/(2*R)
+}
+@
+
+
+<<Bylane5, eval=TRUE>>=
+LaneCEobserved<-rep(5,0)
+for(i in 1:5){
+  R<-EstimatesByLane[i,1]/100
+  N<-(PicardLane[i,3]-PicardLane[i,7])
+  startX<-CEME[i]
+  LaneCEobserved[i]<-optimize(libCompNewParam,R=R,N=N,interval=c(0,2*startX),maximum=F)$minimum
+}
+LaneCEobserved
+@
+
+<<Bylane6, eval=TRUE>>=
+LaneCEcorrected<-rep(5,0)
+for(i in 1:5){
+  R<-EstimatesByLane[i,3]/100
+  N<-(PicardLane[i,3]-PicardLane[i,7])
+  startX<-CEME[i]
+  LaneCEcorrected[i]<-optimize(libCompNewParam,R=R,N=N,interval=c(0,2*startX),maximum=F)$minimum
+}
+LaneCEcorrected
+@
+
+
+
+<<Bylane7, fig=TRUE, include=FALSE, width=5, height=5,eval=TRUE>>=
+plot(PicardLane[,9],pch=16,ylim=c(4847379100,10400000000))
+points(LaneCEobserved,pch=16,col="red")
+points(LaneCEcorrected,pch=16,col="blue")
+@
+\incfig[!h]{duplicatessweave-Bylane7}{0.7\textwidth}{Consistency of estimates from sets of 2 fragments and sets of more than 2 fragments.}
+
+

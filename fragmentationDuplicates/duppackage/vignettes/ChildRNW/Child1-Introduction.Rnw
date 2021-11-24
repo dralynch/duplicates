@@ -1,0 +1,48 @@
+% !Rnw root = duplicatessweave.Rnw
+
+\subsection{This Sweave}
+
+After offering guidance on using the package, this Sweave generates the tables and data-driven figures displayed in the paper `A method for the empirical correction of estimated PCR duplication rates, with applications' by Lynch, Smith, Eldridge and Taver\'{e} on behalf of the OCCAMS Consortium. It also provides greater information on some points of detail. It is dependent on the \Bioconductor{} \Biocpkg{BiocStyle} package.
+
+This Sweave is part of the \R{} package \Rpackage{FragmentationDuplicates} that provides functionality for the methods described in that paper. 
+
+\subsection{The Data}
+
+The contents of the extdata folder in the package are:
+
+<<Overview>>=
+list.files(system.file("extdata", package="FragmentationDuplicates"))
+@
+
+\file{WeaverSuppTable1.txt} reproduces data from the first Supplementary Table of Weaver et al. (2014) \emph{Nature Genetics} \textbf{46}, 837-843, and describes the samples used to illustrate this manuscript.
+
+The files \file{HetSNPDups.txt}, \file{HetSNPDupsByLane.txt}, \file{HetSNPDupsHighGC.txt}, \file{HetSNPDupsLowGC.txt}, \file{HetSNPTableSingleEnd.tsv}, \file{HetSNPTableTumourAABB.tsv}, \file{HetSNPTableTumourAB.tsv}, \file{HSTtest.tsv} give tables of allele patterns from duplicate-fragment-sets for various BAM file and SNP combinations (the last file in that list being an artificial case) and are used through this vignette.
+
+\file{SNPstoextract.txt} gives details of the SNPs described in Section~\ref{sec:SNPs}.
+
+The contents of \file{masks} and \file{Picard} detail the numbers of reads and duplicates within defined regions of the genome as discussed in Section~\ref{sec:SampInfo}, while the contents of \file{Tumour} are used in Section~\ref{sec:Tumour}. \file{ISDs} contains details of the insert size distributions for the samples we are considering in this study.
+
+
+\subsection{The Functions}
+
+The library defines several functions including the following key ones:
+
+\begin{itemize}
+  \item \Rfunction{processBAMfordups}: a function to process a BAM file (or BAM files) and produce a table detailing the allele patterns of all observed duplicate fragment-sets. More details are given in the next section.
+  \item \Rfunction{processduptable}: a function that processes the output of \Rfunction{processBAMfordups} and returns estimates of the duplicate rates broken down into PCR and fragmentation duplicates. More details are given in the next section.
+    \item \Rfunction{genPL}: Generate the lists of all partitions of $M$ objects.
+    \item \Rfunction{genCoefs}: Generates the coefficients associated with partitions of objects.
+\end{itemize}
+
+
+\subsection{Preparations}
+
+There are a few steps that we must take before we begin.
+
+<<Preparation>>=
+library("xtable")
+library("Rsamtools")
+library("BSgenome.Hsapiens.UCSC.hg19")
+EDpath <- system.file("extdata", package="FragmentationDuplicates")
+@
+

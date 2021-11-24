@@ -1,0 +1,62 @@
+% !Rnw root = duplicatessweave.Rnw
+
+\subsection{Estimating the fragmentation-duplicate proportion}
+
+
+We now calculate the maximum likelihood estimates of the proportions of duplicates that are fragmentation duplicates.
+
+<<EstimateFDvec,eval=TRUE>>=
+PL<-genPL(16)
+CL<-genCoefs(PL)
+FDres<-processduptable(HetSNPTable,PL,CL)
+FDres
+@
+
+\subsection{The Picard estimates}
+
+From Picard, we generate two estimates of the duplication rate: the basic estimate as reported by Picard and a residual estimate generated only from regions of the genome that are not masked. 
+
+<<EstimateDupRates,eval=TRUE>>=
+  BasicEst<-(readPairDuplicates[,1]-OpticalPairDuplicates[,1])/
+  (readPairsExamined[,1]-OpticalPairDuplicates[,1])
+  ResidEst<-(readPairDuplicates[,9]-OpticalPairDuplicates[,9])/
+  (readPairsExamined[,9]-OpticalPairDuplicates[,9])
+@      
+
+
+We now generate Figure 2 from the main manuscript (Figure \ref{duplicatessweave-AddFig2} in this document).
+
+<<AddFig2, fig=TRUE, include=FALSE, width=8, height=6,eval=TRUE>>=
+  par(mfrow=c(1,2))
+
+plot(c(0,0.15),c(0,0.15),type="n",xlab="Estimates from 2,500 SNPs",ylab="Picard Estimates",main="Uncorrected Estimates")
+for(i in 1:22){
+lines(c(FDres[i,1]/100,FDres[i,1]/100),c(BasicEst[i],ResidEst[i]))
+points(FDres[i,1]/100,BasicEst[i],pch=16,col="red")
+points(FDres[i,1]/100,ResidEst[i],pch=16,col="black")
+}
+abline(0,1)
+legend("bottomright",fill=c("red","black"),legend=c("Basic Estimate","Masked Estimate"))
+
+plot(100*BasicEst/FDres[,3],FDres[,1]/FDres[,3],xlim=c(0.9,2.6),ylim=c(0.9,1.3),pch=16,xlab="Picard Estimate/Corrected Estimate",ylab="Observation from SNPs/Corrected Estimate",main="PCR duplicate rate")
+abline(v=1,lwd=2)
+abline(h=1,lwd=2)
+@
+
+\incfig[ht!]{duplicatessweave-AddFig2}{\textwidth}{The different estimates of duplication rate}
+
+We see in Figure~\ref{duplicatessweave-AddFig2} that the masking of regions of the genome does a good job, but consistently fails to bring the estimate of the overall duplicate rate down to that observed from the 2,500 loci. Thus we use our observed duplicate rate from the SNPs as our baseline, and see that after correction it is reduced by up to one fifth. The original (standard) Picard estimate can overestimate the rate by a factor of 2.5.
+
+\subsection{Other properties}
+
+How many more reads are being marked as duplicates than we would want?
+
+<<ExcessDups,eval=TRUE>>=
+readPairDuplicates[,1]-(FDres[,3]/100)*readPairsExamined[,1]/(1+FDres[,3]/100)
+@
+
+What depth of coverage does this represent?
+
+<<ExcessDups,eval=TRUE>>=
+round((readPairDuplicates[,1]-(FDres[,3]/100)*readPairsExamined[,1]/(1+FDres[,3]/100))*200/effectiveGenomeSize[1],1)
+@
