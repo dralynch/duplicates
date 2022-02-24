@@ -1,7 +1,7 @@
 ---
-title: "Untitled"
-author: "Andy"
-date: "16/11/2021"
+title: "Document supporting `PCR duplicate proportion estimation and consequences for DNA copy number calculations'"
+author: "Andy Lynch"
+date: "16/01/2022"
 output: html_document
 ---
 
@@ -13,19 +13,16 @@ knitr::opts_chunk$set(echo = TRUE)
 This is a minimal document to generate the results in the manuscript. 
 
 ```{r prelims}
+BiocManager::install("BSgenome.Hsapiens.UCSC.hg19")
 library("Rsamtools")
 library("FragmentationDuplicates")
 EDpath<-system.file("extdata", package="FragmentationDuplicates")
-#EDPath<-"/Users/agl4/Dropbox/duplicates/duppackage/inst/extdata/"
-#  "LynchSmithEldridgeTavareFragDup/inst/extdata/"
 ```
 
+To inform our work, we applied the tool `Picard' to various different regions of the genome and summarize the results in this table. It isn't presented in the paper, but is the basis for some discussion at the end of part 1.1.
 
 ```{r picard}
 unmaskedP<-read.delim(paste(EDpath,"/Picard/samples.metrics.txt",sep=""),as.is=T)
-
-
-
 
 readPairsExamined <- readPairDuplicates <- OpticalPairDuplicates <- matrix(ncol=9, nrow=22, dimnames = list(unmaskedP[,1], c("Total","X","Y","M","Centromeres","Telomeres","LowCov","HighCov","Residual")))
 
@@ -64,16 +61,16 @@ readPairsExamined[,9]<-readPairsExamined[,1]-apply(readPairsExamined[,2:8],1,sum
 OpticalPairDuplicates[,9]<-OpticalPairDuplicates[,1]-apply(OpticalPairDuplicates[,2:8],1,sum)
 
 reptable<-matrix(0,ncol=4,nrow=8)
-reptable[1,]<-round(100*sapply(split(((RPD[,9]/RPE[,9])),Group),mean),2)
+reptable[1,]<-round(100*sapply(split(((readPairDuplicates[,9]/readPairsExamined[,9])),Group),mean),2)
 for(i in 2:8){
-  reptable[i,]<-round(sapply(split(((RPD[,i]/RPE[,i])/(RPD[,9]/RPE[,9])),Group),mean),2)
+  reptable[i,]<-round(sapply(split(((readPairDuplicates[,i]/readPairsExamined[,i])/(readPairDuplicates[,9]/readPairsExamined[,9])),Group),mean),2)
 }
 #reptable
 
-ResDupR<-RPD[,9]/RPE[,9]
-ResDepth<-round(200*(RPE[,9]-OpticalPairDuplicates[,9])/EGS[9],2)
+ResDupR<-readPairDuplicates[,9]/readPairsExamined[,9]
+ResDepth<-round(200*(readPairsExamined[,9]-OpticalPairDuplicates[,9])/EGS[9],2)
 
-ResDepthDupRem<-round(200*(RPE[,9]-RPD[,9]-OpticalPairDuplicates[,9])/EGS[9],2)
+ResDepthDupRem<-round(200*(readPairsExamined[,9]-readPairDuplicates[,9]-OpticalPairDuplicates[,9])/EGS[9],2)
 
   BasicEst<-(readPairDuplicates[,1]-OpticalPairDuplicates[,1])/
   (readPairsExamined[,1]-OpticalPairDuplicates[,1])
@@ -84,7 +81,7 @@ ResDepthDupRem<-round(200*(RPE[,9]-RPD[,9]-OpticalPairDuplicates[,9])/EGS[9],2)
 ```
 
 
-
+Summaries of the heterozygous SNPs from the example data are given in the package, and we process them here using the methods presented in the paper.
 ```{r genestimates}
 
 HetSNPTable<-read.delim(file.path(EDpath,"HetSNPDups.txt"),as.is=T)
@@ -92,6 +89,8 @@ PL<-genPL(16)
 CL<-genCoefs(PL)
 FDres<-processduptable(HetSNPTable,PL,CL)
 ```
+
+We now produce figure 2 of the paper.
 
 ```{r estimateplot}
 
@@ -116,6 +115,8 @@ abline(h=1,lwd=2)
 dev.off()
 ```
 
+Now we perform the processing necessary to produce figure 3 of the paper.
+
 ```{r singleend}
 HetSNPTableSE<-read.delim(file.path(EDpath,"HetSNPTableSingleEnd.tsv"),as.is=T,header=T)
 SEests<-processduptable(HetSNPTableSE,PL,CL,reso=1001)
@@ -131,7 +132,7 @@ abline(0,1)
 dev.off()
 ```
 
-
+This section draws on summaries derived for different copy number states and then produces Figure 4.
 ```{r tumour}
 HetSNPTableAABB<-read.delim(file.path(EDpath,"HetSNPTableTumourAABB.tsv"),as.is=T,header=T)
 HetSNPTableAB<-read.delim(file.path(EDpath,"HetSNPTableTumourAB.tsv"),as.is=T,header=T)
@@ -140,6 +141,8 @@ rownames(HetSNPTableTumour)<-c("AABB","AB")
 rm(HetSNPTableAB,HetSNPTableAABB)
 tumourresults<-processduptable(HetSNPTableTumour,PL,CL)
 ```
+
+Here we generate data for Figure 7 in the paper:
 
 ```{r mito}
 i<-3
@@ -171,11 +174,15 @@ MTCNcor<-MitoCov/NuclearCovPerCopy
   
 ```
 
+These are the data from Yaun et al. which is citation 15 in the paper.
+
 ```{r PCAWG}
 
-## From supplementary material for Yuanet al (2020). Comprehensive molecular characterization of mitochondrial genomes in human cancers. Nature Genetics, 52(3), 342–352.
+## From supplementary material for Yuan et al (2020). Comprehensive molecular characterization of mitochondrial genomes in human cancers. Nature Genetics, 52(3), 342–352.
 PCAWG<-c(300.6549982,130.610943,603.9354818,318.8582608,247.1975181,75.11459474,195.4605537,101.4383611,267.9739402,177.7428225,320.8641443,454.414171,193.4416843,183.1840712,243.3734567,371.5073704,137.2701945,196.9313568,225.4146729,138.5534034,279.5720601,164.4498631,140.5688875,156.9191376,143.5136508,310.5046524,187.2813062,146.9098841,147.2362958,141.8160834,111.4595505,145.5640682,120.2311169,150.7269393,166.5555356,126.5012388,211.8039265,198.5621459,134.3952882,144.6492944,102.1598613,172.2856122,230.4994119,216.8637284,162.4593709,320.5602413,134.6479081,75.39691491,147.0414197,402.4110327,116.2298472,156.3966169,302.9745917,532.5634505,150.6302249,201.076587,118.7878462,135.6954622,74.27481745,253.4217658,249.13731,237.0978902,120.4590114,110.9118497)
 ```
+
+and now we produce figure 7.
 
 ```{r mitoplot}
 pdf("mitoCN.pdf",width=12.2,height=5)
@@ -193,6 +200,7 @@ axis(1,at=1:5,labels=c("Benign\nTissue","Blood","Benign\nTissue","Blood","Tumour
 dev.off()
 ```
 
+and another version
 
 ```{r mitoplot2}
 pdf("mitoCNalt.pdf",width=12.2,height=5)
@@ -212,7 +220,7 @@ axis(1,at=1:7,labels=c("Benign\nTissue","Blood","Benign\nTissue","Blood","Benign
 dev.off()
 ```
 
-
+Here we define some functions for generating some simulated reads. Note that the allele-specific aspects (defining A and B copy numbers separately) are not used.
 ```{r Simulations}
 
 
@@ -225,7 +233,7 @@ simreads<-function(A=1,B=1,cov=Coverage,GL=GenomeLength,
   Aends<-Astarts+2*RL+round(pmax(rnorm(Areads,ISM,ISS),0))
   
   Bstarts<-sample(GL,Breads,replace=T)
-  Bends<-Bstarts+2*RL+round(pmax(rnorm(Areads,ISM,ISS),0))
+  Bends<-Bstarts+2*RL+round(pmax(rnorm(Breads,ISM,ISS),0))
   
   reorder<-sample(Areads+Breads)
   
@@ -250,12 +258,16 @@ getobs<-function(CN,cov=Coverage,GL=GenomeLength,
   return(sum(!tmp$duplicates)*2*ReadLength/GenomeLength)
 }
 
+```
 
+The work for figure 6 is now presented.
+
+```{r}
 xvals<-c(2,seq(50,1000,50))
 
 GenomeLength<-100000
 InsertSizeM<-300
-InsertSizeS<-50
+InsertSizeS<-40
 ReadLength<-100
 Coverage=30
 SNPspace<-500
@@ -298,12 +310,70 @@ for(i in 1:21){
 }
 
 
-pdf("simmtDNACN.pdf",width=12.2,height=5)
+pdf("simmtDNACNB.pdf",width=12.2,height=5)
 par(mar=c(5.1,4.6,1.1,.6))
 plot(xvals,100-(200*yvals/yvals[1])/xvals,type="l",xlim=c(0,1000),ylim=c(0,50),ylab="Percentage Discarded",las=1,xlab="True Copy Number",lwd=3,cex.lab=1.5,cex.axis=1.3,yaxs="i")
 lines(xvals,100-(200*yvals2/yvals2[1])/xvals,lwd=3,lty="45")
 lines(xvals,100-(200*yvals3/yvals3[1])/xvals,lty="221226",lwd=3)
 legend("topleft",legend=c("RL=75, SD=40, Cov=30","RL=100, SD=50, Cov=30","RL=150, SD=100, Cov=15"),lty=c("221226","solid","45"),lwd=3,cex=1.5)
+dev.off()
+```
+
+Finally, we look at the work for figure 5. 
+
+```{r}
+tumMTCN<-1000
+benMTCN<-500
+tumCN<-3
+NucGenome<-3000000000
+MTGenome<-16569
+
+Tumprop<-0.9
+InsertSizeM<-300
+InsertSizeS<-40
+ReadLength<-100
+
+
+result<-matrix(NA,ncol=14,nrow=11)
+
+for(i in 1:14){
+
+tumMTCN<-seq(200,1500,100)[i]
+
+for(j in 1:11){
+
+Tumprop<-seq(0.5,1,0.05)[j]
+
+
+Noreads<-1000000000
+
+Nobases<-Noreads*2*ReadLength
+
+TotGen<-NucGenome*(tumCN*Tumprop+2*(1-Tumprop))+MTGenome*(tumMTCN*Tumprop+benMTCN*(1-Tumprop))
+
+Cov<-Nobases/TotGen
+
+mtsim<-simreads(A=1,B=(tumMTCN*Tumprop+(1-Tumprop)*benMTCN)-1,cov=Cov,GL=MTGenome,ISM=InsertSizeM,ISS=InsertSizeS,RL=ReadLength)
+mtsim<-markdups(mtsim)
+
+
+nucsim<-simreads(A=1,B=tumCN*Tumprop+1-2*Tumprop,cov=Cov,GL=1000000,ISM=InsertSizeM,ISS=InsertSizeS,RL=ReadLength)
+nucsim<-markdups(nucsim)
+
+result[j,i]<-table(mtsim$duplicates)["FALSE"]*2*ReadLength*prop.table(table(nucsim$duplicates))["FALSE"]/(MTGenome*Cov)
+}}
+
+
+pdf("mtDNAbiases.pdf",width=12.2,height=5)
+par(mar=c(5.1,4.6,3.1,.6))
+plot(seq(200,1500,100),result[1,],type="l",ylim=c(200,1500),xlim=c(200,1600),xlab="True tumour mtDNA copy number",ylab="Inferred copy number")
+abline(0,1,lwd=3)
+lines(seq(200,1500,100),result[11,],type="l",ylim=c(200,1500))
+lines(seq(200,1500,100),result[6,],type="l",ylim=c(200,1500))
+abline(v=500,lty=2)
+text(1550,660,"50%")
+text(1550,786,"75%")
+text(1550,908,"100%")
 dev.off()
 ```
 
